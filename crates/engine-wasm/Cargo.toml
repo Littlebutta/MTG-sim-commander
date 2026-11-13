@@ -1,0 +1,15 @@
+[package]
+name = "engine-wasm"
+description = "WebAssembly build of the game session, for running the UI in a browser during development"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+client-api = { path = "../client-api" }
+rules-core = { path = "../rules-core" }
+serde_json.workspace = true
+wasm-bindgen = "=0.2.130"

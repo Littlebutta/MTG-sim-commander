@@ -23,7 +23,7 @@ Known gaps (planned):
 - Damage assignment among multiple blockers is automatic (lethal in order) instead of a player choice (510.1c).
 - Replacement/prevention effects framework (614–616) beyond the commander replacement.
 - Planeswalker/battle attacks, protection, ward, copy/face-down (layer 1) beyond basic copy, text-changing (layer 3).
-- Hidden-information views for networking.
+- Choices made during resolution (choose a mode, a card, a pile) and manual combat damage assignment.
 
 ## Card data (`carddb`)
 
@@ -31,3 +31,16 @@ Known gaps (planned):
 - Update check against MTGJSON `Meta.json` (download happens in the app).
 - Oracle-text parser for keywords, mana abilities, common triggers, anthems and common spell effects.
 - Decklist import (Moxfield/Archidekt/MTGO text, `*CMDR*`) and validation: size, singleton, color identity, commander eligibility, partner/background pairs, banned list, unsupported-card report.
+
+## Client (`client-api`, `engine-wasm`, `app/`)
+
+- `client-api` turns a game into a per-player view with hidden information removed (only your own hand and nobody's library), plus hints for what you can legally do right now. Practice opponents play by simple rules.
+- The engine compiles to WebAssembly and runs inside the desktop window (and in a browser for development).
+- Table UI: opponents across the top with focus switching, your board split into lands and creatures, fanned hand, command zone, stack panel, card preview on hover, targeting, attacking and blocking, auto-pass when you have nothing to do (turn off with "Full control").
+- Desktop shell (Tauri 2) shipped as a portable folder. On launch it checks this repo's latest GitHub release, downloads the `*-windows-portable.zip`, verifies its SHA-256, swaps the files in place and restarts. Files under `data/` are never overwritten.
+- Every merge to `main` publishes a release `v0.1.<run>` via `.github/workflows/release.yml`.
+
+### Next
+
+- Deck import screen, and downloading the full MTGJSON card pool into `data/` on first launch and whenever MTGJSON publishes new cards.
+- Steam lobbies and invites (host-authoritative: the host runs the engine, players send actions).
