@@ -1,0 +1,48 @@
+{
+  "meta": { "date": "2026-11-12", "version": "5.3.0+20261112" },
+  "data": {
+    "Atraxa, Praetors' Voice": [{
+      "name": "Atraxa, Praetors' Voice", "layout": "normal", "manaCost": "{G}{W}{U}{B}",
+      "colors": ["B","G","U","W"], "colorIdentity": ["B","G","U","W"],
+      "types": ["Creature"], "supertypes": ["Legendary"], "subtypes": ["Phyrexian","Angel","Horror"],
+      "power": "4", "toughness": "4",
+      "text": "Flying, vigilance, deathtouch, lifelink\nAt the beginning of your end step, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)",
+      "keywords": ["Deathtouch","Flying","Lifelink","Proliferate","Vigilance"],
+      "legalities": { "commander": "Legal" }, "leadershipSkills": { "brawl": false, "commander": true, "oathbreaker": false }
+    }],
+    "Sol Ring": [{
+      "name": "Sol Ring", "layout": "normal", "manaCost": "{1}", "colors": [], "colorIdentity": [],
+      "types": ["Artifact"], "supertypes": [], "subtypes": [], "text": "{T}: Add {C}{C}.",
+      "legalities": { "commander": "Legal" }
+    }],
+    "Forest": [{
+      "name": "Forest", "layout": "normal", "colors": [], "colorIdentity": ["G"],
+      "types": ["Land"], "supertypes": ["Basic"], "subtypes": ["Forest"], "text": "({T}: Add {G}.)",
+      "legalities": { "commander": "Legal" }
+    }],
+    "Lightning Bolt": [{
+      "name": "Lightning Bolt", "layout": "normal", "manaCost": "{R}", "colors": ["R"], "colorIdentity": ["R"],
+      "types": ["Instant"], "supertypes": [], "subtypes": [], "text": "Lightning Bolt deals 3 damage to any target.",
+      "legalities": { "commander": "Legal" }
+    }],
+    "Swords to Plowshares": [{
+      "name": "Swords to Plowshares", "layout": "normal", "manaCost": "{W}", "colors": ["W"], "colorIdentity": ["W"],
+      "types": ["Instant"], "supertypes": [], "subtypes": [], "text": "Exile target creature. Its controller gains life equal to its power.",
+      "legalities": { "commander": "Legal" }
+    }],
+    "Mana Crypt": [{
+      "name": "Mana Crypt", "layout": "normal", "manaCost": "{0}", "colors": [], "colorIdentity": [],
+      "types": ["Artifact"], "supertypes": [], "subtypes": [],
+      "text": "At the beginning of your upkeep, flip a coin. If you lose the flip, Mana Crypt deals 3 damage to you.\n{T}: Add {C}{C}.",
+      "legalities": { "commander": "Banned" }
+    }],
+    "Fire // Ice": [
+      { "name": "Fire // Ice", "faceName": "Fire", "side": "a", "layout": "split", "manaCost": "{1}{R}", "colors": ["R"], "colorIdentity": ["R","U"],
+        "types": ["Instant"], "supertypes": [], "subtypes": [], "text": "Fire deals 2 damage divided as you choose among one or two targets.",
+        "legalities": { "commander": "Legal" } },
+      { "name": "Fire // Ice", "faceName": "Ice", "side": "b", "layout": "split", "manaCost": "{1}{U}", "colors": ["U"], "colorIdentity": ["R","U"],
+        "types": ["Instant"], "supertypes": [], "subtypes": [], "text": "Tap target permanent.\nDraw a card.",
+        "legalities": { "commander": "Legal" } }
+    ]
+  }
+}
