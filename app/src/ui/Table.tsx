@@ -52,6 +52,15 @@ function Medallion({ seat, targetable, onClick, position }: { seat: SeatView; ta
   );
 }
 
+// The engine writes "<name> casts X."; for the local player, whose seat is "You", say "You cast X."
+const VERBS: Record<string, string> = {
+  casts: "cast", plays: "play", mulligans: "mulligan", concedes: "concede", loses: "lose", wins: "win", goes: "go",
+  draws: "draw", attacks: "attack", blocks: "block", activates: "activate", discards: "discard", keeps: "keep", gains: "gain",
+};
+function youGrammar(line: string): string {
+  return line.replace(/^You (\w+)\b/, (m, v: string) => (VERBS[v] ? `You ${VERBS[v]}` : m));
+}
+
 export function Table({ session, onExit }: { session: GameSession; onExit: () => void }) {
   const [view, setView] = useState<PlayerView>(() => session.view());
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
@@ -64,6 +73,8 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const [pickedBlocker, setPickedBlocker] = useState<number | null>(null);
   const [endTurn, setEndTurn] = useState<number | null>(null);
   const [fullControl, setFullControl] = useState(false);
+  const [thinking, setThinking] = useState<number | null>(null);
+  const [fast, setFast] = useState(false);
 
   const me = view.players[view.you];
   const opponents = view.players.filter((p) => !p.is_you);
@@ -80,6 +91,56 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     },
     [session],
   );
+
+  // Computer players: decide, "think" for a human-like moment, then play.
+  useEffect(() => {
+    if (view.your_decision || kind === "GameOver") {
+      setThinking(null);
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const step = () => {
+      if (cancelled) return;
+      // Instant passes happen in a batch so the table doesn't crawl through empty steps.
+      let applied = false;
+      for (let i = 0; i < 200; i++) {
+        const next = session.nextBot();
+        if (!next || next.think_ms > 0) {
+          if (applied) {
+            // Show what changed first; this effect runs again for the next move.
+            setView(session.view());
+            return;
+          }
+          if (!next) {
+            setThinking(null);
+            return;
+          }
+          setThinking(next.player);
+          timer = setTimeout(() => {
+            if (cancelled) return;
+            session.applyBot();
+            setThinking(null);
+            setView(session.view());
+          }, fast ? Math.min(next.think_ms, 350) : next.think_ms);
+          return;
+        }
+        session.applyBot();
+        applied = true;
+      }
+      setView(session.view());
+    };
+    timer = setTimeout(step, 30);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [view, kind, session, fast]);
+
+  // Watch whoever is taking their turn.
+  useEffect(() => {
+    if (view.active !== view.you) setFocus(view.active);
+  }, [view.active, view.you]);
 
   useEffect(() => {
     if (!toast) return;
@@ -272,6 +333,14 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
+  // The most recent thing that happened, in words (zone bookkeeping lines are skipped).
+  const latest = (() => {
+    for (let i = view.log.length - 1; i >= 0 && i >= view.log.length - 12; i--) {
+      if (!view.log[i].includes(" -> ")) return { i, line: view.log[i] };
+    }
+    return null;
+  })();
+
   const topIsTarget = (t: Target) => mode.kind === "target" && isTargetable(t);
 
   return (
@@ -279,12 +348,12 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       {/* Opponent seats */}
       <header className="seats">
         {opponents.map((p) => (
-          <button key={p.id} className={`seat ${p.id === focused.id ? "focused" : ""} ${p.id !== focused.id && view.battlefield.some((c) => c.controller === p.id && isTargetable({ Object: c.id })) ? "has-targets" : ""} ${p.is_active ? "active" : ""} ${p.lost ? "lost" : ""} ${topIsTarget({ Player: p.id }) ? "glow-target" : ""}`}
+          <button key={p.id} className={`seat ${p.id === focused.id ? "focused" : ""} ${p.id !== focused.id && view.battlefield.some((c) => c.controller === p.id && isTargetable({ Object: c.id })) ? "has-targets" : ""} ${p.is_active ? "active" : ""} ${p.lost ? "lost" : ""} ${thinking === p.id ? "thinking" : ""} ${topIsTarget({ Player: p.id }) ? "glow-target" : ""}`}
             onClick={() => (topIsTarget({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
             <Sigil seat={p} size={28} />
             <span className="seat-name">{p.name}</span>
             <span className="seat-life">{p.life}</span>
-            <span className="seat-meta">{p.hand_count} in hand · {p.library_count} in library</span>
+            <span className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : `${p.hand_count} in hand · ${p.library_count} in library`}</span>
             {me.commander_damage[p.command[0]?.name ?? ""] !== undefined && (
               <span className="seat-cmd" title="Commander damage you've taken from them">⚔ {me.commander_damage[p.command[0]?.name ?? ""]}</span>
             )}
@@ -292,6 +361,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
         ))}
         <div className="seat-tools">
           <label className="toggle"><input type="checkbox" checked={fullControl} onChange={(e) => setFullControl(e.target.checked)} /> Full control</label>
+          <label className="toggle" title="Computer players take less time to think"><input type="checkbox" checked={fast} onChange={(e) => setFast(e.target.checked)} /> Fast opponents</label>
           <button className="ghost" onClick={() => setLogOpen(!logOpen)} title="Game log"><ScrollIcon /></button>
           <button className="ghost" onClick={onExit}>Leave</button>
         </div>
@@ -318,6 +388,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
           ))}
         </div>
         <div className="step-name">{STEP_NAMES[view.step]}</div>
+        {latest && <div className="ticker" key={latest.i}>{youGrammar(latest.line)}</div>}
       </div>
 
       {/* My board */}
@@ -408,7 +479,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       {logOpen && (
         <aside className="log">
           <div className="log-title">Game log</div>
-          <div className="log-body">{[...view.log].reverse().map((l, i) => <div key={i}>{l}</div>)}</div>
+          <div className="log-body">{[...view.log].reverse().map((l, i) => <div key={i}>{youGrammar(l)}</div>)}</div>
         </aside>
       )}
 

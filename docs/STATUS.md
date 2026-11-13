@@ -40,7 +40,21 @@ Known gaps (planned):
 - Desktop shell (Tauri 2) shipped as a portable folder. On launch it checks this repo's latest GitHub release, downloads the `*-windows-portable.zip`, verifies its SHA-256, swaps the files in place and restarts. Files under `data/` are never overwritten.
 - Every merge to `main` publishes a release `v0.1.<run>` via `.github/workflows/release.yml`.
 
+- Card data: on launch the desktop app checks MTGJSON's `Meta.json` and, when there are new cards, downloads `AtomicCards.json.gz` into `data/cards/` (checked against MTGJSON's SHA-256, parsed before it replaces the old file). Built-in starter cards fill in until the first download.
+- Decks: paste a Moxfield/Archidekt/MTGO list; it's checked live against the card pool (commander, size, singleton, color identity, banned list, unknown and unsupported cards). Saved as `data/decks/*.json`. Decks that break deck-building rules can still be played casually; decks with unknown cards or no commander can't.
+- Game setup: your deck, 1 to 3 computer opponents, each with a deck (or a random built-in one) and a play style.
+
+## Computer players (`client-api/src/ai`)
+
+- For each option (land, spell with each sensible target and X, ability, attack plan, block plan, trigger targets) the AI copies the game, plays the option forward with the real engine (stack resolves, combat finishes, other players' blocks guessed from the board), and scores the result.
+- The score weighs its own life (low life matters more), board, cards in hand and commander damage against each opponent's, weighted by how threatening they look and how much they've attacked or targeted it lately, minus the risk of the crack-back when it taps out.
+- Plays like a person: creatures after combat, instants held for the opponents' end step or combat, counterspells only when something on the stack is worth it, chump blocks only when the damage really matters, near-equal options picked by taste.
+- Three styles (Aggressive, Balanced, Controlling) change risk-taking, patience and how much it values cards.
+- It never looks at hidden cards: only the battlefield, life totals, card counts and its own hand.
+- Thinking time: each decision comes with a human-like delay (longer for big spells and attacks, instant for empty steps); "Fast opponents" shortens it.
+- Tests: wins 12 of 12 against the old simple bot; takes lethal, avoids bad attacks, chump-blocks only at low life, bolts the biggest threat at end of turn, holds removal when nothing's worth killing.
+
 ### Next
 
-- Deck import screen, and downloading the full MTGJSON card pool into `data/` on first launch and whenever MTGJSON publishes new cards.
 - Steam lobbies and invites (host-authoritative: the host runs the engine, players send actions).
+- More card scripting coverage (see the unsupported list in the deck screen).
