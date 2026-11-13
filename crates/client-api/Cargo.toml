@@ -10,3 +10,5 @@ rules-core = { path = "../rules-core" }
 carddb = { path = "../carddb" }
 serde.workspace = true
 serde_json.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true

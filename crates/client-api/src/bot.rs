@@ -88,8 +88,9 @@ fn pick_target(
     };
     // Helpful effects go on our own stuff; everything else at the opponents' best creature or face.
     let helpful = matches!(spec, TargetSpec::Permanent(f) if f.controller == Some(PlayerRef::You));
+    let any = legal.first().copied();
     if helpful {
-        return legal.into_iter().filter(mine).max_by_key(power);
+        return legal.into_iter().filter(mine).max_by_key(power).or(any);
     }
     let theirs: Vec<Target> = legal.into_iter().filter(|t| !mine(t)).collect();
     theirs
@@ -102,6 +103,7 @@ fn pick_target(
             theirs.iter().find(|t| **t == Target::Player(w)).copied()
         })
         .or_else(|| theirs.first().copied())
+        .or(any)
 }
 
 fn priority(g: &Game, me: PlayerId) -> Action {
