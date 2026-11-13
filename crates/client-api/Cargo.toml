@@ -1,0 +1,12 @@
+[package]
+name = "client-api"
+description = "Player-facing game sessions: hidden-information views, legal-action hints, practice bots"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+rules-core = { path = "../rules-core" }
+carddb = { path = "../carddb" }
+serde.workspace = true
+serde_json.workspace = true

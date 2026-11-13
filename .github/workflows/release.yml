@@ -1,0 +1,80 @@
+name: Release
+
+# Every merge to main builds the portable Windows folder and publishes it as a GitHub release.
+# The desktop app checks the latest release on launch and updates itself from it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            app/src-tauri -> target
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.130
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Set version
+        id: ver
+        run: |
+          VER="0.1.${GITHUB_RUN_NUMBER}"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          sed -i "s/\"version\": \"0.1.0\"/\"version\": \"$VER\"/" app/src-tauri/tauri.conf.json
+          sed -i "0,/^version = \"0.1.0\"/s//version = \"$VER\"/" app/src-tauri/Cargo.toml
+          grep -n "\"version\"" app/src-tauri/tauri.conf.json
+          grep -n "^version" app/src-tauri/Cargo.toml
+
+      - name: Build
+        working-directory: app
+        run: |
+          npm ci
+          npm run wasm
+          npx tauri build --no-bundle
+
+      - name: Package portable folder
+        id: pkg
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          rm -rf dist-portable && mkdir -p dist-portable/CommanderTable/data
+          cp app/src-tauri/target/release/commander-table.exe "dist-portable/CommanderTable/Commander Table.exe"
+          cp docs/PORTABLE-README.txt dist-portable/CommanderTable/README.txt
+          printf "Your decks, settings and downloaded card data live here. Updates never overwrite this folder.\n" > dist-portable/CommanderTable/data/README.txt
+          ZIP="CommanderTable-v${VER}-windows-portable.zip"
+          (cd dist-portable && 7z a -tzip "../$ZIP" CommanderTable > /dev/null)
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          gh release create "v${VER}" "${{ steps.pkg.outputs.zip }}" \
+            --target "${GITHUB_SHA}" \
+            --title "Commander Table ${VER}" \
+            --notes "$(git log -1 --pretty=%B)"

@@ -671,7 +671,7 @@ impl Game {
 
     // ---------------------------------------------------------------- special actions & casting
 
-    fn sorcery_timing_ok(&self, p: PlayerId) -> bool {
+    pub(crate) fn sorcery_timing_ok(&self, p: PlayerId) -> bool {
         p == self.active && self.step.is_main() && self.stack.is_empty()
     }
 
@@ -920,7 +920,7 @@ impl Game {
     }
 
     /// Untapped permanents with a "{T}: Add one mana" ability, and what each could make.
-    fn auto_mana_sources(&self, p: PlayerId) -> Vec<(ObjectId, Vec<ManaType>)> {
+    pub(crate) fn auto_mana_sources(&self, p: PlayerId) -> Vec<(ObjectId, Vec<ManaType>)> {
         let view = self.view();
         let mut out = Vec::new();
         for id in &self.battlefield {
@@ -1895,7 +1895,7 @@ impl Game {
 
     // ---------------------------------------------------------------- combat
 
-    fn could_attack(&self, id: ObjectId) -> bool {
+    pub(crate) fn could_attack(&self, id: ObjectId) -> bool {
         let view = self.view();
         let Some(c) = view.get(id) else { return false };
         let o = &self.objects[&id];
@@ -2110,7 +2110,7 @@ fn matches_filter_any_zone(
 
 /// Pick mana sources to tap so that `pool` plus their mana pays `cost`. Exhaustive over
 /// combinations of the smallest size that could work, with a node budget.
-fn plan_auto_tap(
+pub(crate) fn plan_auto_tap(
     pool: &ManaPool,
     sources: &[(ObjectId, Vec<ManaType>)],
     cost: &ManaCost,

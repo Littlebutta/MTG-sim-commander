@@ -8,7 +8,9 @@ The project is split into layers so the rules can be built and tested before any
 |---|---|
 | `crates/rules-core` | The rules engine. Implements the Comprehensive Rules (Nov 6, 2026) for Commander: turn structure, priority, the stack, state-based actions, triggered abilities, combat, and the continuous-effect layer system (CR 613). No UI or networking code. |
 | `crates/carddb` | Card data: reads MTGJSON `AtomicCards`, turns oracle text into card scripts, imports and validates Commander decklists. |
-| `app/` *(next)* | Tauri 2 + React desktop client, Steam lobbies/invites, self-updating from this repo's GitHub Releases. |
+| `crates/client-api` | Per-player views with hidden information removed, legal-action hints, practice opponents, starter decks. |
+| `crates/engine-wasm` | The engine compiled to WebAssembly for the UI. |
+| `app/` | Tauri 2 + React desktop client, shipped as a portable folder that updates itself from this repo's GitHub Releases. Steam lobbies/invites are next. |
 
 ## How the engine works
 
@@ -24,6 +26,19 @@ MTGJSON gives every card's oracle text, but no tool can turn all of it into work
 
 ```sh
 cargo test --workspace
+
+# desktop client
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.130
+cd app
+npm ci
+npm run wasm        # build the engine for the UI
+npm run dev         # play in a browser at http://localhost:1420
+npx tauri dev       # or run the desktop window
 ```
+
+## Downloading the game
+
+Grab `CommanderTable-v…-windows-portable.zip` from the [latest release](https://github.com/Littlebutta/MTG-sim-commander/releases/latest), unzip it anywhere and run `Commander Table.exe`. It checks for updates on launch.
 
 See [docs/STATUS.md](docs/STATUS.md) for what's implemented and what's next.

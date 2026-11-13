@@ -411,6 +411,12 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
             amount: amount(n)?,
         });
     }
+    if let Some(rest) = s.strip_prefix("lose ") {
+        return Some(Effect::LoseLife {
+            who: PlayerRef::You,
+            amount: amount(rest.strip_suffix(" life")?)?,
+        });
+    }
     if let Some(rest) = s.strip_prefix("each opponent loses ") {
         return Some(Effect::LoseLife {
             who: PlayerRef::Opponents,

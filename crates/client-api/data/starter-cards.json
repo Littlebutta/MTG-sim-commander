@@ -1,0 +1,1282 @@
+{
+ "meta": {
+  "date": "2026-11-13",
+  "version": "starter"
+ },
+ "data": {
+  "Plains": [
+   {
+    "name": "Plains",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [
+     "Plains"
+    ],
+    "text": "({T}: Add {W}.)",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Island": [
+   {
+    "name": "Island",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [
+     "Island"
+    ],
+    "text": "({T}: Add {U}.)",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Swamp": [
+   {
+    "name": "Swamp",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [
+     "Swamp"
+    ],
+    "text": "({T}: Add {B}.)",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Mountain": [
+   {
+    "name": "Mountain",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [
+     "Mountain"
+    ],
+    "text": "({T}: Add {R}.)",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Forest": [
+   {
+    "name": "Forest",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [
+     "Forest"
+    ],
+    "text": "({T}: Add {G}.)",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Kamahl, Pit Fighter": [
+   {
+    "name": "Kamahl, Pit Fighter",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [
+     "Legendary"
+    ],
+    "subtypes": [
+     "Human",
+     "Barbarian"
+    ],
+    "text": "Haste\n{T}: Kamahl deals 3 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{R}{R}",
+    "power": "6",
+    "toughness": "1",
+    "leadershipSkills": {
+     "brawl": false,
+     "commander": true,
+     "oathbreaker": false
+    }
+   }
+  ],
+  "Isamaru, Hound of Konda": [
+   {
+    "name": "Isamaru, Hound of Konda",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [
+     "Legendary"
+    ],
+    "subtypes": [
+     "Dog"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{W}",
+    "power": "2",
+    "toughness": "2",
+    "leadershipSkills": {
+     "brawl": false,
+     "commander": true,
+     "oathbreaker": false
+    }
+   }
+  ],
+  "Yargle, Glutton of Urborg": [
+   {
+    "name": "Yargle, Glutton of Urborg",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [
+     "Legendary"
+    ],
+    "subtypes": [
+     "Frog",
+     "Spirit"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{B}",
+    "power": "9",
+    "toughness": "3",
+    "leadershipSkills": {
+     "brawl": false,
+     "commander": true,
+     "oathbreaker": false
+    }
+   }
+  ],
+  "Jenara, Asura of War": [
+   {
+    "name": "Jenara, Asura of War",
+    "layout": "normal",
+    "colors": [
+     "G",
+     "U",
+     "W"
+    ],
+    "colorIdentity": [
+     "G",
+     "U",
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [
+     "Legendary"
+    ],
+    "subtypes": [
+     "Angel"
+    ],
+    "text": "Flying\n{1}{W}: Put a +1/+1 counter on Jenara, Asura of War.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}{W}{U}",
+    "power": "3",
+    "toughness": "3",
+    "leadershipSkills": {
+     "brawl": false,
+     "commander": true,
+     "oathbreaker": false
+    }
+   }
+  ],
+  "Sol Ring": [
+   {
+    "name": "Sol Ring",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "{T}: Add {C}{C}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}"
+   }
+  ],
+  "Mind Stone": [
+   {
+    "name": "Mind Stone",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "{T}: Add {C}.\n{1}, {T}, Sacrifice Mind Stone: Draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}"
+   }
+  ],
+  "Llanowar Elves": [
+   {
+    "name": "Llanowar Elves",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elf",
+     "Druid"
+    ],
+    "text": "{T}: Add {G}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Grizzly Bears": [
+   {
+    "name": "Grizzly Bears",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Bear"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Giant Growth": [
+   {
+    "name": "Giant Growth",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +3/+3 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}"
+   }
+  ],
+  "Titanic Growth": [
+   {
+    "name": "Titanic Growth",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +4/+4 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}"
+   }
+  ],
+  "Elvish Visionary": [
+   {
+    "name": "Elvish Visionary",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elf",
+     "Shaman"
+    ],
+    "text": "When this creature enters, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Llanowar Visionary": [
+   {
+    "name": "Llanowar Visionary",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elf",
+     "Druid"
+    ],
+    "text": "When this creature enters, draw a card.\n{T}: Add {G}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{G}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Giant Spider": [
+   {
+    "name": "Giant Spider",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Spider"
+    ],
+    "text": "Reach",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{G}",
+    "power": "2",
+    "toughness": "4"
+   }
+  ],
+  "Garruk's Companion": [
+   {
+    "name": "Garruk's Companion",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Beast"
+    ],
+    "text": "Trample, haste",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}{G}",
+    "power": "3",
+    "toughness": "2"
+   }
+  ],
+  "Craw Wurm": [
+   {
+    "name": "Craw Wurm",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wurm"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{G}{G}",
+    "power": "6",
+    "toughness": "4"
+   }
+  ],
+  "Lightning Bolt": [
+   {
+    "name": "Lightning Bolt",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Lightning Bolt deals 3 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}"
+   }
+  ],
+  "Shock": [
+   {
+    "name": "Shock",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Shock deals 2 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}"
+   }
+  ],
+  "Searing Spear": [
+   {
+    "name": "Searing Spear",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Searing Spear deals 3 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{R}"
+   }
+  ],
+  "Lava Axe": [
+   {
+    "name": "Lava Axe",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Lava Axe deals 5 damage to target player.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{R}"
+   }
+  ],
+  "Raging Goblin": [
+   {
+    "name": "Raging Goblin",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Goblin",
+     "Berserker"
+    ],
+    "text": "Haste",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Hill Giant": [
+   {
+    "name": "Hill Giant",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Giant"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{R}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Fire Elemental": [
+   {
+    "name": "Fire Elemental",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elemental"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{R}{R}",
+    "power": "5",
+    "toughness": "4"
+   }
+  ],
+  "Furnace Whelp": [
+   {
+    "name": "Furnace Whelp",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Dragon"
+    ],
+    "text": "Flying\n{R}: This creature gets +1/+0 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{R}{R}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Savannah Lions": [
+   {
+    "name": "Savannah Lions",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Cat"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{W}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Youthful Knight": [
+   {
+    "name": "Youthful Knight",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Knight"
+    ],
+    "text": "First strike",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Serra Angel": [
+   {
+    "name": "Serra Angel",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Angel"
+    ],
+    "text": "Flying, vigilance",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{W}{W}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Benalish Marshal": [
+   {
+    "name": "Benalish Marshal",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Knight"
+    ],
+    "text": "Other creatures you control get +1/+1.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{W}{W}{W}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Glorious Anthem": [
+   {
+    "name": "Glorious Anthem",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Enchantment"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Creatures you control get +1/+1.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}{W}"
+   }
+  ],
+  "Raise the Alarm": [
+   {
+    "name": "Raise the Alarm",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Create two 1/1 white Soldier creature tokens.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}"
+   }
+  ],
+  "Day of Judgment": [
+   {
+    "name": "Day of Judgment",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Destroy all creatures.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{W}{W}"
+   }
+  ],
+  "Counterspell": [
+   {
+    "name": "Counterspell",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Counter target spell.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}{U}"
+   }
+  ],
+  "Cancel": [
+   {
+    "name": "Cancel",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Counter target spell.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{U}{U}"
+   }
+  ],
+  "Divination": [
+   {
+    "name": "Divination",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Draw two cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}"
+   }
+  ],
+  "Unsummon": [
+   {
+    "name": "Unsummon",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Return target creature to its owner's hand.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}"
+   }
+  ],
+  "Wind Drake": [
+   {
+    "name": "Wind Drake",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Drake"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Air Elemental": [
+   {
+    "name": "Air Elemental",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elemental"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{U}{U}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Man-o'-War": [
+   {
+    "name": "Man-o'-War",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Jellyfish"
+    ],
+    "text": "When this creature enters, return target creature to its owner's hand.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Murder": [
+   {
+    "name": "Murder",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Destroy target creature.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{B}{B}"
+   }
+  ],
+  "Vampire Nighthawk": [
+   {
+    "name": "Vampire Nighthawk",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Vampire",
+     "Shaman"
+    ],
+    "text": "Flying, deathtouch, lifelink",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{B}{B}",
+    "power": "2",
+    "toughness": "3"
+   }
+  ],
+  "Typhoid Rats": [
+   {
+    "name": "Typhoid Rats",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Rat"
+    ],
+    "text": "Deathtouch",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{B}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Gravedigger": [
+   {
+    "name": "Gravedigger",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Zombie"
+    ],
+    "text": "When this creature enters, you may return target creature card from your graveyard to your hand.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{B}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Night's Whisper": [
+   {
+    "name": "Night's Whisper",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "You draw two cards and you lose 2 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{B}"
+   }
+  ],
+  "Hypnotic Specter": [
+   {
+    "name": "Hypnotic Specter",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Specter"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{B}{B}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Gray Merchant Acolyte": [
+   {
+    "name": "Gray Merchant Acolyte",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Zombie",
+     "Cleric"
+    ],
+    "text": "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{B}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ]
+ }
+}

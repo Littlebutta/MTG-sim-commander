@@ -12,6 +12,7 @@ pub mod engine;
 pub mod game;
 pub mod ids;
 pub mod layers;
+pub mod legal;
 pub mod mana;
 pub mod state;
 
