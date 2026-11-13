@@ -1,0 +1,12 @@
+[package]
+name = "rules-core"
+description = "Magic: The Gathering Commander rules engine (Comprehensive Rules, Nov 2026)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+thiserror.workspace = true

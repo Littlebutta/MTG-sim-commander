@@ -1,0 +1,12 @@
+[package]
+name = "carddb"
+description = "MTGJSON card import, oracle-text parsing and Commander deck import"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+rules-core = { path = "../rules-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
