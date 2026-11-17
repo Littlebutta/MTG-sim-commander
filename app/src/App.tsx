@@ -3,12 +3,13 @@ import { cardStatus, syncCards, type CardStatus } from "./decks";
 import { startPractice, type GameSession } from "./engine/session";
 import { appVersion, checkForUpdate, type UpdateState } from "./updater";
 import { DeckScreen } from "./ui/DeckScreen";
+import { BuilderScreen } from "./ui/BuilderScreen";
 import { loadSettings } from "./settings";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { SetupScreen } from "./ui/SetupScreen";
 import { Table } from "./ui/Table";
 
-type Screen = "menu" | "decks" | "setup" | "settings";
+type Screen = "menu" | "decks" | "setup" | "settings" | "builder";
 
 function CardData({ status }: { status: CardStatus | null }) {
   if (!status) return null;
@@ -46,6 +47,7 @@ export function App() {
   }, []);
 
   if (session) return <Table session={session} onExit={() => setSession(null)} />;
+  if (screen === "builder") return <BuilderScreen onBack={() => setScreen("menu")} />;
   if (screen === "decks") return <DeckScreen onBack={() => setScreen("menu")} />;
   if (screen === "settings") return <SettingsScreen onBack={() => setScreen("menu")} />;
   if (screen === "setup") return <SetupScreen onBack={() => setScreen("menu")} onStart={(s) => { setScreen("menu"); setSession(s); }} />;
@@ -76,6 +78,7 @@ export function App() {
 
         <div className="menu-section">
           <button className="btn btn-primary big" onClick={() => setScreen("setup")}>New game</button>
+          <button className="btn big" onClick={() => setScreen("builder")}>Deck builder</button>
           <button className="btn big" onClick={() => setScreen("decks")}>Decks</button>
           <button className="btn big" onClick={() => setScreen("settings")}>Table &amp; cards</button>
           <button className="btn btn-quiet" disabled={loading} onClick={quick}>{loading ? "Shuffling…" : "Quick practice with built-in decks"}</button>

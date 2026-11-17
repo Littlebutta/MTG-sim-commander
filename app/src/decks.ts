@@ -2,7 +2,7 @@
 // checked against the full MTGJSON card pool; in a plain browser (development) they live in
 // localStorage and only the built-in starter cards are known.
 
-import { checkDeckBuiltin, resolveDeckBuiltin, starterDecks, type ResolvedDeck } from "./engine/session";
+import { checkDeckBuiltin, lookupBuiltin, recommendBuiltin, resolveDeckBuiltin, searchCardsBuiltin, starterDecks, type ResolvedDeck } from "./engine/session";
 
 export interface DeckCheck {
   commanders: string[];
@@ -93,4 +93,53 @@ export async function syncCards(): Promise<CardStatus | null> {
 
 export function newDeckId(): string {
   return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ---------------------------------------------------------------- deck builder
+
+export type Role = "Land" | "Ramp" | "Draw" | "Removal" | "Wipe" | "Creature";
+
+export interface CardSummary {
+  name: string;
+  mana_cost: string;
+  mana_value: number;
+  type_line: string;
+  color_identity: string;
+  oracle_text: string;
+  power: number | null;
+  toughness: number | null;
+  can_be_commander: boolean;
+  supported: boolean;
+  roles: Role[];
+}
+
+export interface SearchQuery {
+  text?: string;
+  identity?: string | null;
+  types?: string[];
+  commanders_only?: boolean;
+  max_mv?: number | null;
+  limit?: number;
+}
+
+export interface Recommendations {
+  commanders: string[];
+  identity: string;
+  stats: { cards: number; lands: number; ramp: number; draw: number; removal: number; wipes: number; creatures: number; curve: number[]; avg_mv: number };
+  themes: string[];
+  advice: { role: Role | null; have: number; want: number; text: string }[];
+  picks: { card: CardSummary; role: Role | null; reason: string }[];
+}
+
+export async function searchCards(query: SearchQuery): Promise<CardSummary[]> {
+  return inTauri() ? invoke<CardSummary[]>("search_cards", { query }) : (searchCardsBuiltin(query) as Promise<CardSummary[]>);
+}
+
+export async function recommendCards(text: string): Promise<Recommendations> {
+  return inTauri() ? invoke<Recommendations>("recommend_cards", { text }) : (recommendBuiltin(text) as Promise<Recommendations>);
+}
+
+export async function lookupCards(names: string[]): Promise<CardSummary[]> {
+  if (names.length === 0) return [];
+  return inTauri() ? invoke<CardSummary[]>("lookup_cards", { names }) : (lookupBuiltin(names) as Promise<CardSummary[]>);
 }

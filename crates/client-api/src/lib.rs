@@ -6,6 +6,7 @@
 //! information (hands, libraries) never leaves the host.
 
 pub mod ai;
+pub mod builder;
 mod bot;
 pub mod decks;
 mod describe;

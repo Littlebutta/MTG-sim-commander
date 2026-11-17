@@ -99,3 +99,28 @@ pub fn resolve_deck(name: &str, text: &str) -> Result<String, JsValue> {
     let deck = client_api::resolve_deck(name, text, &index).map_err(js_err)?;
     Ok(serde_json::to_string(&deck).unwrap())
 }
+
+/// Search the built-in card pool. `query_json` is a `SearchQuery`; returns JSON `CardSummary[]`.
+#[wasm_bindgen]
+pub fn search_cards(query_json: &str) -> Result<String, JsValue> {
+    let q: client_api::builder::SearchQuery = serde_json::from_str(query_json).map_err(js_err)?;
+    let cards = starter_cards();
+    Ok(serde_json::to_string(&client_api::builder::search(&cards, &q)).unwrap())
+}
+
+/// Statistics and suggestions for a decklist, from the built-in card pool.
+#[wasm_bindgen]
+pub fn recommend_cards(text: &str) -> String {
+    let cards = starter_cards();
+    let index = carddb::CardIndex::new(&cards);
+    serde_json::to_string(&client_api::builder::recommend(text, &cards, &index)).unwrap()
+}
+
+/// Summaries for a JSON list of card names, from the built-in card pool.
+#[wasm_bindgen]
+pub fn lookup_cards(names_json: &str) -> Result<String, JsValue> {
+    let names: Vec<String> = serde_json::from_str(names_json).map_err(js_err)?;
+    let cards = starter_cards();
+    let index = carddb::CardIndex::new(&cards);
+    Ok(serde_json::to_string(&client_api::builder::lookup(&index, &names)).unwrap())
+}

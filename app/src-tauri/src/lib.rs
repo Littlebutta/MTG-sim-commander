@@ -70,6 +70,45 @@ async fn check_deck(pool: PoolState<'_>, text: String) -> Result<DeckCheck, Stri
 }
 
 #[tauri::command]
+async fn search_cards(
+    pool: PoolState<'_>,
+    query: client_api::builder::SearchQuery,
+) -> Result<Vec<client_api::builder::CardSummary>, String> {
+    let pool = pool.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        pool.with_pool(&data_dir(), |all, _| client_api::builder::search(all, &query))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn lookup_cards(
+    pool: PoolState<'_>,
+    names: Vec<String>,
+) -> Result<Vec<client_api::builder::CardSummary>, String> {
+    let pool = pool.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        pool.with_index(&data_dir(), |i| client_api::builder::lookup(i, &names))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn recommend_cards(
+    pool: PoolState<'_>,
+    text: String,
+) -> Result<client_api::builder::Recommendations, String> {
+    let pool = pool.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        pool.with_pool(&data_dir(), |all, i| client_api::builder::recommend(&text, all, i))
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn resolve_deck(
     pool: PoolState<'_>,
     name: String,
@@ -138,6 +177,9 @@ pub fn run() {
             sync_cards,
             check_deck,
             resolve_deck,
+            search_cards,
+            recommend_cards,
+            lookup_cards,
             list_decks,
             save_deck,
             delete_deck,
