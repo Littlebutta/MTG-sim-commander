@@ -466,7 +466,10 @@ mod tests {
             s.run_bots();
             let d = s.game.decision().clone();
             let Some(p) = d.player() else { break };
-            if matches!(d, Decision::Priority { .. }) && !s.game.stack.is_empty() && s.rewind_points().is_empty() {
+            if matches!(d, Decision::Priority { .. })
+                && !s.game.stack.is_empty()
+                && s.rewind_points().is_empty()
+            {
                 let top = s.game.stack.last().unwrap().id;
                 s.submit(p, Action::Pass).unwrap();
                 s.run_bots();
