@@ -217,7 +217,7 @@ impl Brain {
             2 => (1..=6).contains(&lands),
             _ => true,
         };
-        let think_ms = self.think(1800, 4200);
+        let think_ms = self.think(1100, 2400);
         if !keep {
             return Decided {
                 action: Action::Mulligan,
@@ -376,7 +376,7 @@ impl Brain {
                 }
             }
             if let Some((_, l)) = best {
-                let think_ms = self.think(500, 1200);
+                let think_ms = self.think(350, 800);
                 return Decided {
                     action: Action::PlayLand(l),
                     think_ms,
@@ -484,9 +484,9 @@ impl Brain {
                     _ => 1,
                 };
                 let think_ms = if g.stack.is_empty() {
-                    self.think(900, 2000) + 120 * mv
+                    self.think(700, 1500) + 90 * mv
                 } else {
-                    self.think(700, 1500)
+                    self.think(500, 1100)
                 };
                 Decided {
                     action: o.action,
@@ -497,9 +497,9 @@ impl Brain {
                 let think_ms = if considered
                     || (!g.stack.is_empty() && g.stack.last().is_some_and(|e| e.controller != me))
                 {
-                    self.think(300, 900)
+                    self.think(180, 450)
                 } else if sorcery_time {
-                    self.think(250, 700)
+                    self.think(120, 350)
                 } else {
                     0
                 };
@@ -565,7 +565,7 @@ impl Brain {
         let think_ms = if attackers.is_empty() {
             0
         } else {
-            self.think(1100, 2400) + 250 * plan.len() as u32
+            self.think(800, 1700) + 180 * plan.len() as u32
         };
         Decided {
             action: Action::Attack(plan),
@@ -624,7 +624,7 @@ impl Brain {
         let think_ms = if incoming.is_empty() {
             0
         } else {
-            self.think(1000, 2300) + 200 * plan.len() as u32
+            self.think(700, 1600) + 150 * plan.len() as u32
         };
         Decided {
             action: Action::Block(plan),
@@ -673,7 +673,7 @@ impl Brain {
                 chosen[i] = list[i].1.clone();
             }
         }
-        let think_ms = self.think(500, 1200);
+        let think_ms = self.think(350, 800);
         Decided {
             action: Action::OrderTriggers((0..count).map(|j| (j, chosen[j].clone())).collect()),
             think_ms,
@@ -713,7 +713,7 @@ impl Brain {
         ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
         Decided {
             action: Action::Discard(ranked.into_iter().take(count).map(|x| x.1).collect()),
-            think_ms: self.think(900, 1800),
+            think_ms: self.think(600, 1200),
         }
     }
 }
