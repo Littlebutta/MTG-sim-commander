@@ -4,6 +4,7 @@
 mod art;
 mod cards;
 mod decks;
+mod steam;
 mod update;
 
 use cards::{CardStatus, Pool};
@@ -11,7 +12,7 @@ use client_api::{DeckCheck, ResolvedDeck};
 use decks::SavedDeck;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 use update::UpdateInfo;
 
 /// The folder the game lives in. Everything (data, decks, cards) stays inside it.
@@ -166,6 +167,42 @@ fn save_settings(settings: serde_json::Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------- Steam
+
+#[tauri::command]
+fn steam_status(steam: State<'_, steam::Steam>) -> steam::SteamStatus {
+    steam.status()
+}
+
+#[tauri::command]
+fn steam_create_lobby(steam: State<'_, steam::Steam>) -> Result<(), String> {
+    steam.create()
+}
+
+#[tauri::command]
+fn steam_invite(steam: State<'_, steam::Steam>) -> Result<(), String> {
+    steam.invite()
+}
+
+#[tauri::command]
+fn steam_join(steam: State<'_, steam::Steam>, lobby: String) -> Result<(), String> {
+    steam.join(&lobby)
+}
+
+#[tauri::command]
+fn steam_leave(steam: State<'_, steam::Steam>) -> Result<(), String> {
+    steam.leave()
+}
+
+#[tauri::command]
+fn steam_send(
+    steam: State<'_, steam::Steam>,
+    to: Option<String>,
+    data: String,
+) -> Result<(), String> {
+    steam.message(to.as_deref(), data)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     update::cleanup_old(&install_dir());
@@ -173,6 +210,10 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Pool::default()))
         .manage(Arc::new(art::ArtCache::default()))
+        .setup(|app| {
+            app.manage(steam::Steam::start(app.handle().clone()));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_version,
             check_update,
@@ -189,7 +230,13 @@ pub fn run() {
             delete_deck,
             card_art,
             load_settings,
-            save_settings
+            save_settings,
+            steam_status,
+            steam_create_lobby,
+            steam_invite,
+            steam_join,
+            steam_leave,
+            steam_send
         ])
         .run(tauri::generate_context!())
         .expect("error while running Commander Table");

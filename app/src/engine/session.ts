@@ -21,6 +21,11 @@ export interface GameSession {
   rewindEnabled: boolean;
   rewindPoints(): RewindPoint[];
   rewind(index: number): string | null;
+  /** Online games change without your input: call back when they do (with an error, if one of
+   * your actions was refused). Returns an unsubscribe function. */
+  subscribe?(cb: (error?: string) => void): () => void;
+  /** Online games: leave the lobby when you leave the table. */
+  leave?(): void;
 }
 
 export interface RewindPoint {
@@ -87,6 +92,14 @@ export async function startGame(seats: SeatSpec[], opts: { rewind?: boolean } = 
   const s = WasmSession.from_seats(BigInt(seed), JSON.stringify(seats));
   s.set_rewind(opts.rewind ?? true);
   return wrap(s, opts.rewind ?? true);
+}
+
+/** The raw engine for a game, for the online host to wrap. */
+export async function startRawGame(seats: SeatSpec[], seed = Date.now()): Promise<WasmSession> {
+  await engineReady();
+  const s = WasmSession.from_seats(BigInt(seed), JSON.stringify(seats));
+  s.set_rewind(false);
+  return s;
 }
 
 export async function starterDecks(): Promise<{ name: string; text: string }[]> {

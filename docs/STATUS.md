@@ -45,6 +45,7 @@ Known gaps (planned):
 - Card data: on launch the desktop app checks MTGJSON's `Meta.json` and, when there are new cards, downloads `AtomicCards.json.gz` into `data/cards/` (checked against MTGJSON's SHA-256, parsed before it replaces the old file). Built-in starter cards fill in until the first download.
 - Decks: paste a Moxfield/Archidekt/MTGO list; it's checked live against the card pool (commander, size, singleton, color identity, banned list, unknown and unsupported cards). Saved as `data/decks/*.json`. Decks that break deck-building rules can still be played casually; decks with unknown cards or no commander can't.
 - Deck builder (main menu): search the card pool by name, type or rules text, limited to your commander's colors; the deck grouped by type with a mana curve and counts of lands, ramp, card draw, removal, board wipes and creatures against common guidelines. Suggestions fill what the deck is short of, match the commander's themes (tokens, +1/+1 counters, a creature type...), favor well-known staples and cards the game fully runs.
+- Online play over Steam ("Play with friends"): host a friends-only lobby, invite from the Steam overlay (accepting an invite opens the game and its lobby, even if it was closed), everyone picks a deck, the host adds computer players to fill seats and starts. The host runs the rules engine; the others send actions and get their own view back over Steam's peer-to-peer messages. If someone leaves, a computer player takes their seat. "Go back and respond" is off online. Uses Steam's test app ID 480 until the game has its own (`app/src-tauri/src/steam.rs`). Without Steam running, everything else works.
 - Game setup: your deck, 1 to 3 computer opponents, each with a deck (or a random built-in one) and a play style.
 
 ## Computer players (`client-api/src/ai`)
@@ -59,5 +60,4 @@ Known gaps (planned):
 
 ### Next
 
-- Steam lobbies and invites (host-authoritative; rewind off online: the host runs the engine, players send actions).
 - More card scripting coverage (see the unsupported list in the deck screen).

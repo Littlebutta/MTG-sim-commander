@@ -63,6 +63,9 @@ jobs:
           VER="${{ steps.ver.outputs.version }}"
           rm -rf dist-portable && mkdir -p dist-portable/CommanderTable/data
           cp app/src-tauri/target/release/commander-table.exe "dist-portable/CommanderTable/Commander Table.exe"
+          # Steam's library sits next to the exe; the game won't start without it.
+          DLL=$(find app/src-tauri/target/release/build -path '*steamworks-sys-*/out/steam_api64.dll' | head -n1)
+          test -n "$DLL" && cp "$DLL" dist-portable/CommanderTable/
           cp docs/PORTABLE-README.txt dist-portable/CommanderTable/README.txt
           printf "Your decks, settings and downloaded card data live here. Updates never overwrite this folder.\n" > dist-portable/CommanderTable/data/README.txt
           ZIP="CommanderTable-v${VER}-windows-portable.zip"
