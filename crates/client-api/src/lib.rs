@@ -151,10 +151,33 @@ pub struct PendingBot {
     action: Option<Action>,
 }
 
+/// A moment you could have responded to something on the stack, kept so you can go back to it.
+#[derive(Clone)]
+struct RewindPoint {
+    stack_id: ObjectId,
+    label: RewindView,
+    game: Game,
+}
+
+/// What the rewind panel shows for one point.
+#[derive(Clone, Debug, Serialize)]
+pub struct RewindView {
+    pub index: usize,
+    pub name: String,
+    pub controller: PlayerId,
+    pub turn: u32,
+}
+
+/// How many stack items back a player may rewind to respond (house rule, practice games).
+pub const REWIND_DEPTH: usize = 2;
+
 pub struct Session {
     pub game: Game,
     pub brains: Vec<Brain>,
     pending: Option<PendingBot>,
+    rewind: Vec<RewindPoint>,
+    /// Allow going back to respond to the last few stack items.
+    pub rewind_enabled: bool,
 }
 
 impl Session {
@@ -186,6 +209,8 @@ impl Session {
             game,
             brains,
             pending: None,
+            rewind: Vec::new(),
+            rewind_enabled: true,
         }
     }
 
@@ -237,11 +262,86 @@ impl Session {
         if self.brains.iter().any(|b| b.me == player) {
             return Err("that seat is played by the computer".into());
         }
+        let before = self.rewind_candidate(player, &action);
         self.game
             .submit(player, action)
             .map_err(|e| e.to_string())?;
+        if let Some(p) = before {
+            self.rewind.push(p);
+            if self.rewind.len() > REWIND_DEPTH {
+                self.rewind.remove(0);
+            }
+        }
         self.pending = None;
         self.observe_all();
+        Ok(())
+    }
+
+    /// When a person passes with something on the stack, remember that moment (once per item).
+    fn rewind_candidate(&self, player: PlayerId, action: &Action) -> Option<RewindPoint> {
+        if !self.rewind_enabled || *action != Action::Pass {
+            return None;
+        }
+        if !matches!(self.game.decision(), Decision::Priority { player: p } if *p == player) {
+            return None;
+        }
+        let top = self.game.stack.last()?;
+        if self.rewind.iter().any(|r| r.stack_id == top.id) {
+            return None;
+        }
+        let name = match &top.kind {
+            StackKind::Spell => self
+                .game
+                .object(top.id)
+                .map(|o| o.def.name.clone())
+                .unwrap_or_default(),
+            StackKind::Ability { source_name, .. } => format!("{source_name} (ability)"),
+        };
+        Some(RewindPoint {
+            stack_id: top.id,
+            label: RewindView {
+                index: 0,
+                name,
+                controller: top.controller,
+                turn: self.game.turn,
+            },
+            game: self.game.clone(),
+        })
+    }
+
+    /// The moments you can go back to, newest first.
+    pub fn rewind_points(&self) -> Vec<RewindView> {
+        self.rewind
+            .iter()
+            .enumerate()
+            .rev()
+            // Only this turn: going back further would undo whole turns of play.
+            .filter(|(_, r)| r.label.turn == self.game.turn)
+            .map(|(i, r)| RewindView {
+                index: i,
+                ..r.label.clone()
+            })
+            .collect()
+    }
+
+    /// Go back to the moment you could respond to that stack item. Later points are dropped.
+    pub fn rewind_to(&mut self, index: usize) -> Result<(), String> {
+        if self
+            .rewind
+            .get(index)
+            .is_none_or(|r| r.label.turn != self.game.turn)
+        {
+            return Err("that moment is too far back".into());
+        }
+        let point = self.rewind.remove(index);
+        self.rewind.truncate(index);
+        let mut game = point.game;
+        // The clone left the log behind; keep the real history and note the rewind.
+        game.log = std::mem::take(&mut self.game.log);
+        game.log
+            .push(format!("Rewound to respond to {}.", point.label.name));
+        self.game = game;
+        self.pending = None;
         Ok(())
     }
 
@@ -356,6 +456,36 @@ mod tests {
         assert!(v.turn > 3, "turn {}", v.turn);
         let json = serde_json::to_string(&v).unwrap();
         assert!(json.contains("\"players\""));
+    }
+
+    #[test]
+    fn rewind_returns_to_a_stack_item_you_passed_on() {
+        let mut s = Session::new_practice(4, 2);
+        let mut rewound = false;
+        for _ in 0..5000 {
+            s.run_bots();
+            let d = s.game.decision().clone();
+            let Some(p) = d.player() else { break };
+            if matches!(d, Decision::Priority { .. })
+                && !s.game.stack.is_empty()
+                && s.rewind_points().is_empty()
+            {
+                let top = s.game.stack.last().unwrap().id;
+                s.submit(p, Action::Pass).unwrap();
+                s.run_bots();
+                let points = s.rewind_points();
+                assert_eq!(points.len(), 1);
+                s.rewind_to(points[0].index).unwrap();
+                assert_eq!(s.game.stack.last().map(|e| e.id), Some(top));
+                assert!(matches!(s.game.decision(), Decision::Priority { player } if *player == p));
+                assert!(s.rewind_points().is_empty());
+                rewound = true;
+                break;
+            }
+            let a = bot_action(&s.game, p);
+            s.submit(p, a).unwrap();
+        }
+        assert!(rewound, "never saw a stack item to respond to");
     }
 
     #[test]

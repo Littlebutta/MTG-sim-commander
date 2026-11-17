@@ -37,6 +37,8 @@ Known gaps (planned):
 - `client-api` turns a game into a per-player view with hidden information removed (only your own hand and nobody's library), plus hints for what you can legally do right now. Practice opponents play by simple rules.
 - The engine compiles to WebAssembly and runs inside the desktop window (and in a browser for development).
 - Table UI: opponents across the top with focus switching, your board split into lands and creatures, fanned hand, command zone, stack panel, card preview on hover, targeting, attacking and blocking, auto-pass when you have nothing to do (turn off with "Full control").
+- Drag to play: drag a card from hand onto the table (or straight onto its target), an attacker onto a player, a blocker onto an attacker. Arrows show attacks, blocks and targets. Targets are picked (click or drag) and then confirmed; triggered abilities choose targets on the table the same way.
+- Space opens the stack and holds priority while it's open. With the "Go back and respond" house rule (on by default, toggled in New game), you can step back to either of the last 2 stack items you let go this turn and respond after all.
 - Desktop shell (Tauri 2) shipped as a portable folder. On launch it checks this repo's latest GitHub release, downloads the `*-windows-portable.zip`, verifies its SHA-256, swaps the files in place and restarts. Files under `data/` are never overwritten.
 - Every merge to `main` publishes a release `v0.1.<run>` via `.github/workflows/release.yml`.
 
@@ -56,5 +58,6 @@ Known gaps (planned):
 
 ### Next
 
-- Steam lobbies and invites (host-authoritative: the host runs the engine, players send actions).
+- Deck builder tab with recommendations.
+- Steam lobbies and invites (host-authoritative; rewind off online: the host runs the engine, players send actions).
 - More card scripting coverage (see the unsupported list in the deck screen).

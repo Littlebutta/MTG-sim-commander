@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GameSession } from "../engine/session";
+import type { GameSession, RewindPoint } from "../engine/session";
 import type { Action, CardView, PlayerView, SeatView, Step, Target } from "../engine/types";
 import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
 import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
 import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
 import { DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
+import { ArrowLayer, anchorEl, elementAtPointer, type ArrowSpec } from "./Arrows";
 
 type Mode =
   | { kind: "idle" }
-  | { kind: "target"; title: string; slots: Target[][]; chosen: Target[]; build: (t: Target[]) => Action }
+  | {
+      kind: "target";
+      title: string;
+      /** A prompt per slot, when they differ (several triggers at once). */
+      titles?: string[];
+      slots: Target[][];
+      chosen: Target[];
+      build: (t: Target[]) => Action;
+      /** Where the targeting arrows start. */
+      source?: number;
+      /** Triggered abilities must go on the stack; they can't be called off. */
+      cancellable: boolean;
+    }
   | { kind: "abilities"; card: CardView };
 
 const SunIcon = ({ size = 14 }: { size?: number }) => (
@@ -60,7 +73,7 @@ function Sigil({ seat, size }: { seat: SeatView; size: number }) {
 
 function Medallion({ seat, targetable, onClick, position }: { seat: SeatView; targetable: boolean; onClick?: () => void; position: "top" | "bottom" }) {
   return (
-    <div className={`medallion medallion-${position} ${targetable ? "glow-target clickable" : ""} ${seat.has_priority ? "has-priority" : ""}`} onClick={onClick}>
+    <div className={`medallion medallion-${position} ${targetable ? "glow-target clickable" : ""} ${seat.has_priority ? "has-priority" : ""}`} onClick={onClick} data-player={seat.id}>
       <Sigil seat={seat} size={64} />
       <div className="life">{seat.life}</div>
       {Object.keys(seat.mana_pool).length > 0 && (
@@ -100,6 +113,8 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const [inspect, setInspect] = useState<CardView | null>(null);
   const [layout, setLayout] = useState<"table" | "focus">(() => (view.players.length > 2 ? "table" : "focus"));
   const [banner, setBanner] = useState<{ key: number; phase: number; who: string } | null>(null);
+  const [stackOpen, setStackOpen] = useState(false);
+  const [points, setPoints] = useState<RewindPoint[]>([]);
   const settings = useSettings();
 
   const me = view.players[view.you];
@@ -163,6 +178,39 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     };
   }, [view, kind, session, fast]);
 
+  // Space opens the stack: see everything waiting to resolve, hold priority, and (with the house
+  // rule on) step back to something you let go and respond after all.
+  useEffect(() => {
+    setPoints(session.rewindEnabled ? session.rewindPoints() : []);
+  }, [view, session]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (e.repeat) return;
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        setStackOpen((o) => !o);
+      } else if (e.code === "Escape") setStackOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const goBack = (p: RewindPoint) => {
+    const err = session.rewind(p.index);
+    if (err) {
+      setToast(err);
+      return;
+    }
+    setMode({ kind: "idle" });
+    setStackOpen(true);
+    const v = session.view();
+    lastPhase.current = `${v.turn}:${phaseOf(v.step)}`;
+    setView(v);
+    setToast(`Back to ${p.name}. Respond now, or let it resolve.`);
+  };
+
   // Watch whoever is taking their turn.
   useEffect(() => {
     if (view.active !== view.you) setFocus(view.active);
@@ -221,7 +269,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     return !mine && view.step === "End";
   })();
   useEffect(() => {
-    if (mode.kind !== "idle") return;
+    if (mode.kind !== "idle" || stackOpen) return;
     const ending = endTurn !== null && endTurn === view.turn;
     if (endTurn !== null && endTurn !== view.turn) setEndTurn(null);
     let auto: Action | null = null;
@@ -236,19 +284,32 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     if (!auto) return;
     const t = setTimeout(() => act(auto!), 120);
     return () => clearTimeout(t);
-  }, [view, mode, endTurn, fullControl, meaningfulStop, myPriority, kind, act]);
+  }, [view, mode, endTurn, fullControl, meaningfulStop, myPriority, kind, act, stackOpen]);
 
   // ---------------------------------------------------------------- targeting
+  // Choosing a target never commits on its own: pick (click, or drag onto it), then confirm.
+  // Clicking a chosen target again takes it back.
   const currentSlot: Target[] | null = mode.kind === "target" ? mode.slots[mode.chosen.length] ?? null : null;
   const isTargetable = (t: Target) => !!currentSlot?.some((x) => sameTarget(x, t));
+  const isChosen = (t: Target) => mode.kind === "target" && mode.chosen.some((x) => sameTarget(x, t));
+  const pickable = (t: Target) => isTargetable(t) || isChosen(t);
+  const targetsReady = mode.kind === "target" && mode.chosen.length === mode.slots.length;
   const chooseTarget = (t: Target) => {
     if (mode.kind !== "target") return;
-    const chosen = [...mode.chosen, t];
-    if (chosen.length === mode.slots.length) act(mode.build(chosen));
-    else setMode({ ...mode, chosen });
+    const i = mode.chosen.findIndex((x) => sameTarget(x, t));
+    if (i >= 0) setMode({ ...mode, chosen: mode.chosen.slice(0, i) });
+    else if (isTargetable(t)) setMode({ ...mode, chosen: [...mode.chosen, t] });
+  };
+  const confirmTargets = () => {
+    if (mode.kind === "target" && targetsReady) act(mode.build(mode.chosen));
+  };
+  const resetTargets = () => {
+    if (mode.kind !== "target") return;
+    if (mode.cancellable) setMode({ kind: "idle" });
+    else setMode({ ...mode, chosen: [] });
   };
 
-  const beginCast = (c: CardView) => {
+  const beginCast = (c: CardView, first?: Target) => {
     const slots = view.hints.cast_targets[c.id] ?? [];
     let x = 0;
     if (c.has_x) {
@@ -258,7 +319,10 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       x = Math.max(0, parseInt(answer, 10) || 0);
     }
     if (slots.length === 0) act({ Cast: { card: c.id, targets: [], x } });
-    else setMode({ kind: "target", title: `${c.name}: choose ${c.spell_targets[0] ?? "a target"}`, slots, chosen: [], build: (t) => ({ Cast: { card: c.id, targets: t, x } }) });
+    else {
+      const chosen = first && slots[0]?.some((o) => sameTarget(o, first)) ? [first] : [];
+      setMode({ kind: "target", title: `${c.name}: choose ${c.spell_targets[0] ?? "a target"}`, slots, chosen, source: c.id, cancellable: true, build: (t) => ({ Cast: { card: c.id, targets: t, x } }) });
+    }
   };
 
   const activate = (c: CardView, index: number) => {
@@ -278,8 +342,50 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     }
     const slots = view.hints.ability_targets[`${c.id}:${index}`] ?? [];
     if (slots.length === 0) act({ Activate: { object: c.id, ability: index, targets: [], x: 0 } });
-    else setMode({ kind: "target", title: `${c.name}: choose ${ab.targets[0]}`, slots, chosen: [], build: (t) => ({ Activate: { object: c.id, ability: index, targets: t, x: 0 } }) });
+    else setMode({ kind: "target", title: `${c.name}: choose ${ab.targets[0]}`, slots, chosen: [], source: c.id, cancellable: true, build: (t) => ({ Activate: { object: c.id, ability: index, targets: t, x: 0 } }) });
   };
+
+  // Triggered abilities: one with targets goes straight to choosing on the table; several are
+  // ordered first. One without targets just goes on the stack.
+  const trigs = view.your_decision && kind === "PutTriggersOnStack" ? view.hints.triggers : [];
+  const startTriggers = useCallback(
+    (order: number[]) => {
+      const list = order.map((i) => view.hints.triggers.find((t) => t.index === i)!);
+      const slots = list.flatMap((t) => t.targets);
+      if (slots.length === 0) {
+        act({ OrderTriggers: order.map((i) => [i, []]) });
+        return;
+      }
+      const titles = list.flatMap((t) => t.targets.map((_, k) => `${t.source}: ${t.targets.length > 1 ? `choose target ${k + 1} of ${t.targets.length}` : "choose a target"}`));
+      const withTargets = list.find((t) => t.targets.length > 0)!;
+      const src = view.battlefield.find((c) => c.controller === view.you && c.name === withTargets.source)
+        ?? view.battlefield.find((c) => c.name === withTargets.source);
+      setMode({
+        kind: "target",
+        title: titles[0],
+        titles,
+        slots,
+        chosen: [],
+        source: src?.id,
+        cancellable: false,
+        build: (chosen) => {
+          let k = 0;
+          return { OrderTriggers: list.map((t) => [t.index, t.targets.map(() => chosen[k++])] as [number, Target[]]) };
+        },
+      });
+    },
+    [view, act],
+  );
+  const startedTrigger = useRef<string>("");
+  const triggerKey = trigs.length === 1 ? `${view.turn}:${view.log.length}:${trigs[0].index}:${trigs[0].source}` : "";
+  useEffect(() => {
+    if (trigs.length !== 1 || mode.kind !== "idle") return;
+    // Once per trigger, so a refused choice can't loop (the list below takes over).
+    const k = triggerKey;
+    if (startedTrigger.current === k) return;
+    startedTrigger.current = k;
+    startTriggers([trigs[0].index]);
+  }, [trigs, mode.kind, startTriggers, triggerKey]);
 
   // ---------------------------------------------------------------- clicks
   const clickHand = (c: CardView) => {
@@ -290,7 +396,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
 
   const clickPermanent = (c: CardView) => {
     if (mode.kind === "target") {
-      if (isTargetable({ Object: c.id })) chooseTarget({ Object: c.id });
+      chooseTarget({ Object: c.id });
       return;
     }
     if (kind === "DeclareAttackers" && view.your_decision && view.hints.attackers.includes(c.id)) {
@@ -321,7 +427,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   };
 
   const glowFor = (c: CardView): "play" | "target" | "attack" | "block" | "selected" | null => {
-    if (mode.kind === "target") return isTargetable({ Object: c.id }) ? "target" : null;
+    if (mode.kind === "target") return isChosen({ Object: c.id }) ? "selected" : isTargetable({ Object: c.id }) ? "target" : null;
     if (attacks.has(c.id)) return "attack";
     if (blocks.has(c.id)) return "block";
     if (pickedBlocker === c.id) return "selected";
@@ -331,6 +437,123 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     if (c.abilities.some((a) => a.activatable && !a.is_mana)) return "play";
     return null;
   };
+
+  // ---------------------------------------------------------------- dragging
+  // Press on something you can use and drag: a card from hand onto the table (or straight onto
+  // its target), an attacker onto a player, a blocker onto an attacker. A short press is a click.
+  type DragKind = "hand" | "attack" | "block";
+  const [drag, setDrag] = useState<{ kind: DragKind; id: number } | null>(null);
+  const press = useRef<{ kind: DragKind; id: number; x: number; y: number } | null>(null);
+  const swallowClick = useRef(false);
+
+  const dragKindFor = (id: number): DragKind | null => {
+    if (!view.your_decision) return null;
+    if (kind === "DeclareAttackers" && view.hints.attackers.includes(id)) return "attack";
+    if (kind === "DeclareBlockers" && view.hints.blockers.includes(id)) return "block";
+    if (mode.kind === "idle" && view.hand.some((c) => c.id === id) && (view.hints.playable_lands.includes(id) || view.hints.castable.includes(id))) return "hand";
+    return null;
+  };
+  const objAt = (el: Element | null) => {
+    const hit = el?.closest("[data-obj]");
+    return hit ? { el: hit, id: Number(hit.getAttribute("data-obj")) } : null;
+  };
+  const playerAt = (el: Element | null) => {
+    const hit = el?.closest("[data-player]");
+    return hit ? { el: hit, id: Number(hit.getAttribute("data-player")) } : null;
+  };
+  // Where a drag would land, given what's under the pointer.
+  const dropTarget = (k: DragKind, id: number, el: Element | null): { el: Element; target: Target } | null => {
+    if (k === "attack") {
+      const p = playerAt(el);
+      return p && p.id !== view.you && !view.players[p.id]?.lost ? { el: anchorEl({ player: p.id }) ?? p.el, target: { Player: p.id } } : null;
+    }
+    if (k === "block") {
+      const o = objAt(el);
+      const att = o && view.battlefield.find((c) => c.id === o.id && c.attacking === view.you);
+      return o && att ? { el: o.el, target: { Object: o.id } } : null;
+    }
+    const first = view.hints.cast_targets[id]?.[0];
+    if (!first) return null;
+    const o = objAt(el);
+    if (o && o.id !== id && first.some((t) => sameTarget(t, { Object: o.id }))) return { el: o.el, target: { Object: o.id } };
+    const p = playerAt(el);
+    if (p && first.some((t) => sameTarget(t, { Player: p.id }))) return { el: anchorEl({ player: p.id }) ?? p.el, target: { Player: p.id } };
+    return null;
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const o = objAt(e.target as Element);
+    const k = o ? dragKindFor(o.id) : null;
+    press.current = o && k ? { kind: k, id: o.id, x: e.clientX, y: e.clientY } : null;
+  };
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const p = press.current;
+      if (!p || drag) return;
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) {
+        setDrag({ kind: p.kind, id: p.id });
+        setHover(null);
+      }
+    };
+    const up = () => {
+      const p = press.current;
+      press.current = null;
+      if (!drag || !p) return;
+      setDrag(null);
+      swallowClick.current = true;
+      setTimeout(() => (swallowClick.current = false), 0);
+      const el = elementAtPointer();
+      const hit = dropTarget(drag.kind, drag.id, el);
+      if (drag.kind === "attack") {
+        if (hit && "Player" in hit.target) setAttacks(new Map(attacks).set(drag.id, hit.target.Player));
+      } else if (drag.kind === "block") {
+        if (hit && "Object" in hit.target) {
+          setBlocks(new Map(blocks).set(drag.id, hit.target.Object));
+          setPickedBlocker(null);
+        }
+      } else {
+        // Dropped back on the hand: never mind.
+        if (!hit && el?.closest(".dock")) return;
+        const c = view.hand.find((h) => h.id === drag.id);
+        if (!c) return;
+        if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
+        else beginCast(c, hit?.target);
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  });
+
+  // Arrows: what's attacking whom, blocks, chosen targets, and the one following the pointer.
+  const arrows: ArrowSpec[] = [];
+  for (const c of view.battlefield) {
+    if (c.attacking !== null && !attacks.has(c.id)) arrows.push({ key: `in${c.id}`, from: { obj: c.id }, to: { player: c.attacking }, tone: "incoming" });
+  }
+  for (const [a, p] of attacks) arrows.push({ key: `at${a}`, from: { obj: a }, to: { player: p }, tone: "attack" });
+  for (const [b, a] of blocks) arrows.push({ key: `bl${b}`, from: { obj: b }, to: { obj: a }, tone: "block" });
+  if (mode.kind === "target" && mode.source !== undefined) {
+    mode.chosen.forEach((t, i) => arrows.push({ key: `t${i}`, from: { obj: mode.source! }, to: "Player" in t ? { player: t.Player } : { obj: t.Object }, tone: "target" }));
+    if (!targetsReady) arrows.push({ key: "tc", from: { obj: mode.source }, to: "cursor", tone: "drag" });
+  }
+  if (pickedBlocker !== null && !drag) arrows.push({ key: "pb", from: { obj: pickedBlocker }, to: "cursor", tone: "drag" });
+  if (drag) arrows.push({ key: "drag", from: { obj: drag.id }, to: "cursor", tone: "drag" });
+  const snap = (el: Element | null): Element | null => {
+    if (drag) return dropTarget(drag.kind, drag.id, el)?.el ?? null;
+    if (pickedBlocker !== null) return dropTarget("block", pickedBlocker, el)?.el ?? null;
+    if (mode.kind === "target" && !targetsReady) {
+      const o = objAt(el);
+      if (o && isTargetable({ Object: o.id })) return anchorEl({ obj: o.id });
+      const p = playerAt(el);
+      if (p && isTargetable({ Player: p.id })) return anchorEl({ player: p.id });
+    }
+    return null;
+  };
+  const dragCard = drag?.kind === "hand" ? view.hand.find((c) => c.id === drag.id) : undefined;
 
   // ---------------------------------------------------------------- layout helpers
   const rowsFor = (pid: number) => {
@@ -371,13 +594,16 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   }
 
   const status = (() => {
-    if (mode.kind === "target") return mode.title;
+    if (mode.kind === "target") {
+      if (targetsReady) return `${mode.title.split(":")[0]}: confirm, or click a target to change it.`;
+      return (mode.titles?.[mode.chosen.length] ?? mode.title) + " (click it, or drag onto it)";
+    }
     if (!view.your_decision) {
       const p = Object.values(view.decision)[0] as { player?: number };
       return p.player !== undefined ? `Waiting for ${view.players[p.player].name}…` : "";
     }
-    if (kind === "DeclareAttackers") return `Choose attackers. They'll attack ${focused.name} (pick another opponent at the top to switch).`;
-    if (kind === "DeclareBlockers") return pickedBlocker !== null ? "Now pick the attacker to block." : "Choose a blocker, then the attacker it blocks.";
+    if (kind === "DeclareAttackers") return "Drag a creature onto the player to attack, or click it to attack " + focused.name + ".";
+    if (kind === "DeclareBlockers") return pickedBlocker !== null ? "Now pick the attacker to block." : "Drag a blocker onto the attacker it blocks.";
     if (kind === "Priority" && view.stack.length > 0) return "You can respond, or let the top of the stack resolve.";
     return view.active === view.you ? "Your turn" : `${view.players[view.active].name}'s turn`;
   })();
@@ -401,14 +627,23 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   })();
 
   const topIsTarget = (t: Target) => mode.kind === "target" && isTargetable(t);
+  const playerCls = (id: number) => (topIsTarget({ Player: id }) ? "glow-target" : isChosen({ Player: id }) ? "glow-chosen" : "");
 
   return (
-    <div className={`table ${view.active === view.you ? "my-turn" : "their-turn"}`}>
+    <div className={`table ${view.active === view.you ? "my-turn" : "their-turn"} ${drag ? `dragging drag-${drag.kind}` : ""}`}
+      onPointerDown={onPointerDown}
+      onClickCapture={(e) => {
+        if (swallowClick.current) {
+          e.stopPropagation();
+          e.preventDefault();
+          swallowClick.current = false;
+        }
+      }}>
       {/* Opponent seats */}
       <header className="seats">
         {opponents.map((p) => (
-          <button key={p.id} className={`seat ${p.id === focused.id ? "focused" : ""} ${p.id !== focused.id && view.battlefield.some((c) => c.controller === p.id && isTargetable({ Object: c.id })) ? "has-targets" : ""} ${p.is_active ? "active" : ""} ${p.lost ? "lost" : ""} ${thinking === p.id ? "thinking" : ""} ${topIsTarget({ Player: p.id }) ? "glow-target" : ""}`}
-            onClick={() => (topIsTarget({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
+          <button key={p.id} className={`seat ${p.id === focused.id ? "focused" : ""} ${p.id !== focused.id && view.battlefield.some((c) => c.controller === p.id && isTargetable({ Object: c.id })) ? "has-targets" : ""} ${p.is_active ? "active" : ""} ${p.lost ? "lost" : ""} ${thinking === p.id ? "thinking" : ""} ${playerCls(p.id)}`} data-player={p.id}
+            onClick={() => (pickable({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
             <Sigil seat={p} size={28} />
             <span className="seat-name">{p.name}</span>
             <span className="seat-life">{p.life}</span>
@@ -426,6 +661,9 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
               {layout === "table" ? "One opponent" : "All opponents"}
             </button>
           )}
+          <button className={`ghost stack-key ${stackOpen ? "on" : ""}`} onClick={() => setStackOpen(!stackOpen)} title="See the stack and hold priority (Space)">
+            Stack{view.stack.length > 0 ? ` ${view.stack.length}` : ""} <kbd>Space</kbd>
+          </button>
           <button className="ghost" onClick={() => setLogOpen(!logOpen)} title="Game log"><ScrollIcon /></button>
           <button className="ghost" onClick={onExit}>Leave</button>
         </div>
@@ -437,9 +675,9 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
           {opponents.map((p) => {
             const r = rowsFor(p.id);
             return (
-              <div key={p.id} className={`opp-panel theme-surface ${p.is_active ? "is-active" : ""} ${topIsTarget({ Player: p.id }) ? "glow-target" : ""} ${p.lost ? "lost" : ""}`}
-                data-theme={themeForSeat(p.id)}
-                onClick={() => (topIsTarget({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
+              <div key={p.id} className={`opp-panel theme-surface ${p.is_active ? "is-active" : ""} ${playerCls(p.id)} ${p.lost ? "lost" : ""}`}
+                data-theme={themeForSeat(p.id)} data-player={p.id}
+                onClick={() => (pickable({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
                 <div className="opp-panel-head">
                   <Sigil seat={p} size={30} />
                   <div>
@@ -457,7 +695,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
         </section>
       ) : (
       <section className="board board-opp theme-surface" data-theme={themeForSeat(focused.id)}>
-        <Medallion seat={focused} position="top" targetable={topIsTarget({ Player: focused.id })} onClick={() => topIsTarget({ Player: focused.id }) && chooseTarget({ Player: focused.id })} />
+        <Medallion seat={focused} position="top" targetable={pickable({ Player: focused.id })} onClick={() => pickable({ Player: focused.id }) && chooseTarget({ Player: focused.id })} />
         <div className="opp-side">
           <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{focused.library_count}</div>
           <div className="pile pile-gy" title="Graveyard">{focused.graveyard.length}</div>
@@ -502,13 +740,15 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
             const offset = i - (n - 1) / 2;
             const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
             return (
-              <Card key={c.id} card={c} size="hand" glow={playable && mode.kind === "idle" ? "play" : null} dim={mode.kind === "target"}
-                onClick={() => clickHand(c)} onHover={setHover} onInspect={setInspect} className={drawn.has(c.id) ? "drawn" : undefined}
+              <Card key={c.id} card={c} size="hand" glow={playable && mode.kind === "idle" ? "play" : mode.kind === "target" && mode.source === c.id ? "selected" : null}
+                dim={mode.kind === "target" && mode.source !== c.id}
+                onClick={() => clickHand(c)} onHover={drag ? undefined : setHover} onInspect={setInspect}
+                className={[drawn.has(c.id) ? "drawn" : "", drag?.id === c.id ? "lifted" : ""].join(" ")}
                 style={{ transform: `translateX(${offset * -18}px) rotate(${offset * 2.2}deg) translateY(${Math.abs(offset) * 4}px)`, zIndex: i }} />
             );
           })}
         </div>
-        <Medallion seat={me} position="bottom" targetable={topIsTarget({ Player: me.id })} onClick={() => topIsTarget({ Player: me.id }) && chooseTarget({ Player: me.id })} />
+        <Medallion seat={me} position="bottom" targetable={pickable({ Player: me.id })} onClick={() => pickable({ Player: me.id }) && chooseTarget({ Player: me.id })} />
         <div className="dock-right">
           <div className="piles">
             <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{me.library_count}<small>Library</small></div>
@@ -517,7 +757,12 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
           <div className="actions">
             <div className="status">{status}</div>
             {mode.kind === "target" ? (
-              <button className="btn" onClick={() => setMode({ kind: "idle" })}>Cancel</button>
+              <>
+                <button className={`btn btn-primary ${targetsReady ? "" : "is-waiting"}`} disabled={!targetsReady} onClick={confirmTargets}>Confirm</button>
+                {(mode.cancellable || mode.chosen.length > 0) && (
+                  <button className="btn btn-quiet" onClick={resetTargets}>{mode.cancellable ? "Cancel" : "Clear"}</button>
+                )}
+              </>
             ) : (
               primary && <button className={`btn btn-primary ${primary.tone ?? ""}`} onClick={primary.action}>{primary.label}</button>
             )}
@@ -529,12 +774,57 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       </footer>
 
       {/* Stack */}
-      {view.stack.length > 0 && (
+      {stackOpen ? (
+        <aside className="stack stack-open" onClick={(e) => e.stopPropagation()}>
+          <div className="stack-head">
+            <div className="stack-title">Stack</div>
+            <span className="muted small">{myPriority ? "You have priority" : "Holding: you'll get a chance to act"}</span>
+            <button className="ghost" onClick={() => setStackOpen(false)} title="Close (Space)">✕</button>
+          </div>
+          {view.stack.length === 0 && <div className="stack-empty">Nothing is waiting to resolve.</div>}
+          {view.stack.map((s, i) => (
+            <div key={s.id} data-obj={s.id} className={`stack-item ${i === 0 ? "top" : ""} ${topIsTarget({ Object: s.id }) ? "glow-target clickable" : isChosen({ Object: s.id }) ? "glow-chosen clickable" : ""}`}
+              onClick={() => pickable({ Object: s.id }) && chooseTarget({ Object: s.id })}
+              onMouseEnter={() => s.card && setHover(s.card)} onMouseLeave={() => setHover(null)}>
+              <div className="stack-name">
+                <span>{i === 0 && <span className="stack-next">Next</span>}{s.name}{s.is_ability ? " — ability" : ""}</span>
+                {s.card && <ManaCost cost={s.card.mana_cost} />}
+              </div>
+              <div className="stack-meta">{view.players[s.controller].name}{s.targets.length ? ` → ${s.targets.join(", ")}` : ""}</div>
+              {(s.is_ability || !s.card) && <div className="stack-text">{s.text}</div>}
+            </div>
+          ))}
+          {session.rewindEnabled && (
+            <div className="rewind">
+              <div className="rewind-title">Go back and respond</div>
+              {points.length === 0 ? (
+                <div className="muted small">When you let something on the stack go, it shows up here. You can step back to the last {2} and respond after all.</div>
+              ) : (
+                points.map((p, i) => (
+                  <div key={`${p.turn}:${p.name}:${i}`} className="rewind-item">
+                    <div>
+                      <div className="stack-name"><span>{p.name}</span></div>
+                      <div className="stack-meta">{view.players[p.controller].name} · turn {p.turn}{i === 0 ? " · most recent" : ""}</div>
+                    </div>
+                    <button className="btn" onClick={() => goBack(p)}>Go back</button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+          <div className="stack-foot">
+            {mode.kind === "idle" && primary && kind === "Priority" && (
+              <button className="btn btn-primary" onClick={primary.action}>{primary.label}</button>
+            )}
+            <span className="muted small"><kbd>Space</kbd> to close</span>
+          </div>
+        </aside>
+      ) : view.stack.length > 0 && (
         <aside className="stack">
           <div className="stack-title">Stack</div>
           {view.stack.map((s, i) => (
-            <div key={s.id} className={`stack-item ${i === 0 ? "top" : ""} ${topIsTarget({ Object: s.id }) ? "glow-target clickable" : ""}`}
-              onClick={() => topIsTarget({ Object: s.id }) && chooseTarget({ Object: s.id })}
+            <div key={s.id} data-obj={s.id} className={`stack-item ${i === 0 ? "top" : ""} ${topIsTarget({ Object: s.id }) ? "glow-target clickable" : isChosen({ Object: s.id }) ? "glow-chosen clickable" : ""}`}
+              onClick={() => pickable({ Object: s.id }) && chooseTarget({ Object: s.id })}
               onMouseEnter={() => s.card && setHover(s.card)} onMouseLeave={() => setHover(null)}>
               <div className="stack-name">
                 <span>{s.name}{s.is_ability ? " — ability" : ""}</span>
@@ -544,6 +834,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
               {s.is_ability && <div className="stack-text">{s.text}</div>}
             </div>
           ))}
+          <div className="stack-hint"><kbd>Space</kbd> for more</div>
         </aside>
       )}
 
@@ -559,10 +850,11 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
           </div>
         );
       })()}
+      <ArrowLayer arrows={arrows} snap={snap} ghost={dragCard && <Card card={dragCard} size="field" />} />
       {inspect && <RulesPopup card={inspect} onClose={() => setInspect(null)} />}
 
       {/* Hover preview */}
-      {hover && <div className="preview-wrap"><CardPreview card={hover} /></div>}
+      {hover && !drag && <div className="preview-wrap"><CardPreview card={hover} /></div>}
 
       {/* Ability menu */}
       {mode.kind === "abilities" && (
@@ -587,7 +879,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       )}
 
       {kind === "Mulligan" && view.your_decision && <MulliganModal view={view} act={act} onHover={setHover} />}
-      {kind === "PutTriggersOnStack" && view.your_decision && <TriggerModal view={view} act={act} />}
+      {(trigs.length > 1 || (trigs.length === 1 && startedTrigger.current === triggerKey)) && mode.kind === "idle" && <TriggerModal view={view} onDone={startTriggers} />}
       {kind === "Discard" && view.your_decision && <DiscardModal view={view} act={act} onHover={setHover} />}
       {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} />}
 

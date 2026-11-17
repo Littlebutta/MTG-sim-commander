@@ -55,6 +55,21 @@ impl WasmSession {
     pub fn apply_bot(&mut self) {
         self.inner.apply_bot();
     }
+
+    /// Turn the "go back and respond" house rule on or off.
+    pub fn set_rewind(&mut self, enabled: bool) {
+        self.inner.rewind_enabled = enabled;
+    }
+
+    /// JSON list of the last stack items you passed on, newest first.
+    pub fn rewind_points(&self) -> String {
+        serde_json::to_string(&self.inner.rewind_points()).unwrap()
+    }
+
+    /// Go back to the moment you could respond to that item.
+    pub fn rewind(&mut self, index: usize) -> Result<(), JsValue> {
+        self.inner.rewind_to(index).map_err(js_err)
+    }
 }
 
 /// The built-in decks as JSON `[{name, text}]`.

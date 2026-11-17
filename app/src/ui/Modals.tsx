@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Action, CardView, PlayerView, Target } from "../engine/types";
+import type { Action, CardView, PlayerView } from "../engine/types";
 import { Card } from "./Card";
 
 type Act = (a: Action) => void;
@@ -31,17 +31,11 @@ export function MulliganModal({ view, act, onHover }: { view: PlayerView; act: A
   );
 }
 
-function targetName(view: PlayerView, t: Target): string {
-  if ("Player" in t) return view.players[t.Player].name;
-  return view.battlefield.find((c) => c.id === t.Object)?.name ?? `#${t.Object}`;
-}
 
-export function TriggerModal({ view, act }: { view: PlayerView; act: Act }) {
+/** Order several triggers at once. Their targets are chosen on the table afterwards. */
+export function TriggerModal({ view, onDone }: { view: PlayerView; onDone: (order: number[]) => void }) {
   const trigs = view.hints.triggers;
   const [order, setOrder] = useState<number[]>(trigs.map((t) => t.index));
-  const [targets, setTargets] = useState<Record<number, Target[]>>(() =>
-    Object.fromEntries(trigs.map((t) => [t.index, t.targets.map((opts) => opts[0]).filter(Boolean)])),
-  );
   const move = (i: number, d: number) => {
     const o = [...order];
     const j = i + d;
@@ -49,11 +43,12 @@ export function TriggerModal({ view, act }: { view: PlayerView; act: Act }) {
     [o[i], o[j]] = [o[j], o[i]];
     setOrder(o);
   };
+  const needTargets = trigs.some((t) => t.targets.length > 0);
   return (
     <div className="scrim">
       <div className="modal">
         <h2>Your triggered abilities</h2>
-        <p className="muted">Order them on the stack. The bottom one resolves last.</p>
+        <p className="muted">Order them on the stack. The top one resolves first.</p>
         <ol className="trigger-list">
           {[...order].reverse().map((idx, ri) => {
             const t = trigs.find((x) => x.index === idx)!;
@@ -62,27 +57,17 @@ export function TriggerModal({ view, act }: { view: PlayerView; act: Act }) {
               <li key={idx}>
                 <div>
                   <strong>{t.source}</strong> <span className="muted">{t.text}</span>
-                  {t.targets.map((opts, slot) => (
-                    <select key={slot} value={JSON.stringify(targets[idx]?.[slot] ?? null)}
-                      onChange={(e) => {
-                        const next = [...(targets[idx] ?? [])];
-                        next[slot] = JSON.parse(e.target.value);
-                        setTargets({ ...targets, [idx]: next });
-                      }}>
-                      {opts.map((o) => <option key={JSON.stringify(o)} value={JSON.stringify(o)}>{targetName(view, o)}</option>)}
-                    </select>
-                  ))}
                 </div>
                 <span className="order-btns">
-                  <button className="ghost" onClick={() => move(i, 1)}>▲</button>
-                  <button className="ghost" onClick={() => move(i, -1)}>▼</button>
+                  <button className="ghost" onClick={() => move(i, 1)} title="Resolve sooner">▲</button>
+                  <button className="ghost" onClick={() => move(i, -1)} title="Resolve later">▼</button>
                 </span>
               </li>
             );
           })}
         </ol>
         <div className="modal-actions">
-          <button className="btn btn-primary" onClick={() => act({ OrderTriggers: order.map((i) => [i, targets[i] ?? []]) })}>Put on stack</button>
+          <button className="btn btn-primary" onClick={() => onDone(order)}>{needTargets ? "Choose targets" : "Put on stack"}</button>
         </div>
       </div>
     </div>

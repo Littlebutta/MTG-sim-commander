@@ -16,6 +16,18 @@ export interface GameSession {
   nextBot(): PendingBot | null;
   /** Play the move the computer player decided on. */
   applyBot(): void;
+  /** Stack items you passed on that you can still go back and respond to, newest first. */
+  /** Whether the "go back and respond" house rule is on for this game. */
+  rewindEnabled: boolean;
+  rewindPoints(): RewindPoint[];
+  rewind(index: number): string | null;
+}
+
+export interface RewindPoint {
+  index: number;
+  name: string;
+  controller: number;
+  turn: number;
 }
 
 export type Personality = "Aggressive" | "Balanced" | "Controlling";
@@ -39,7 +51,7 @@ export async function engineReady() {
   await ready;
 }
 
-function wrap(s: WasmSession): GameSession {
+function wrap(s: WasmSession, rewind = true): GameSession {
   return {
     view: () => JSON.parse(s.view()) as PlayerView,
     submit: (action) => {
@@ -52,6 +64,16 @@ function wrap(s: WasmSession): GameSession {
     },
     nextBot: () => JSON.parse(s.next_bot()) as PendingBot | null,
     applyBot: () => s.apply_bot(),
+    rewindEnabled: rewind,
+    rewindPoints: () => JSON.parse(s.rewind_points()) as RewindPoint[],
+    rewind: (i) => {
+      try {
+        s.rewind(i);
+        return null;
+      } catch (e) {
+        return String(e);
+      }
+    },
   };
 }
 
@@ -60,9 +82,11 @@ export async function startPractice(players: number, seed = Date.now()): Promise
   return wrap(new WasmSession(BigInt(seed), players));
 }
 
-export async function startGame(seats: SeatSpec[], seed = Date.now()): Promise<GameSession> {
+export async function startGame(seats: SeatSpec[], opts: { rewind?: boolean } = {}, seed = Date.now()): Promise<GameSession> {
   await engineReady();
-  return wrap(WasmSession.from_seats(BigInt(seed), JSON.stringify(seats)));
+  const s = WasmSession.from_seats(BigInt(seed), JSON.stringify(seats));
+  s.set_rewind(opts.rewind ?? true);
+  return wrap(s, opts.rewind ?? true);
 }
 
 export async function starterDecks(): Promise<{ name: string; text: string }[]> {
