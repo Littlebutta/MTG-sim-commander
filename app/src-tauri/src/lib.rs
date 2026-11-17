@@ -1,6 +1,7 @@
 //! Desktop shell for Commander Table: window, self-update, card data, saved decks, and (next)
 //! Steam networking.
 
+mod art;
 mod cards;
 mod decks;
 mod update;
@@ -97,12 +98,38 @@ fn delete_deck(id: String) -> Result<(), String> {
     decks::delete(&data_dir(), &id)
 }
 
+/// Card art for `name`, from the cache or Scryfall. `None` if there is none or we're offline.
+#[tauri::command]
+async fn card_art(
+    art: State<'_, Arc<art::ArtCache>>,
+    name: String,
+) -> Result<Option<art::Art>, String> {
+    let art = art.inner().clone();
+    Ok(art.get(&data_dir(), &name).await.unwrap_or(None))
+}
+
+/// Player settings (board theme, card back...), kept in `data/settings.json`.
+#[tauri::command]
+fn load_settings() -> serde_json::Value {
+    std::fs::read_to_string(data_dir().join("settings.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(serde_json::Value::Null)
+}
+
+#[tauri::command]
+fn save_settings(settings: serde_json::Value) -> Result<(), String> {
+    std::fs::write(data_dir().join("settings.json"), settings.to_string())
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     update::cleanup_old(&install_dir());
     let _ = std::fs::create_dir_all(data_dir());
     tauri::Builder::default()
         .manage(Arc::new(Pool::default()))
+        .manage(Arc::new(art::ArtCache::default()))
         .invoke_handler(tauri::generate_handler![
             app_version,
             check_update,
@@ -113,7 +140,10 @@ pub fn run() {
             resolve_deck,
             list_decks,
             save_deck,
-            delete_deck
+            delete_deck,
+            card_art,
+            load_settings,
+            save_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running Commander Table");

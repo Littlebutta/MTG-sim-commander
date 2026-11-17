@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameSession } from "../engine/session";
 import type { Action, CardView, PlayerView, SeatView, Step, Target } from "../engine/types";
 import { decisionKind, sameTarget } from "../engine/types";
-import { Card, CardPreview, ManaCost } from "./Card";
-import { ScrollIcon } from "./icons";
+import { themeForSeat, useSettings, type Settings } from "../settings";
+import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
+import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
 import { DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
 
 type Mode =
@@ -11,14 +12,35 @@ type Mode =
   | { kind: "target"; title: string; slots: Target[][]; chosen: Target[]; build: (t: Target[]) => Action }
   | { kind: "abilities"; card: CardView };
 
-const PHASES: { label: string; steps: Step[] }[] = [
-  { label: "Upkeep", steps: ["Untap", "Upkeep"] },
-  { label: "Draw", steps: ["Draw"] },
-  { label: "Main", steps: ["Main1"] },
-  { label: "Combat", steps: ["BeginCombat", "DeclareAttackers", "DeclareBlockers", "FirstStrikeDamage", "CombatDamage", "EndCombat"] },
-  { label: "Main 2", steps: ["Main2"] },
-  { label: "End", steps: ["End", "Cleanup"] },
+const SunIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+    <circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
+  </svg>
+);
+const DrawIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" aria-hidden>
+    <rect x="4" y="5" width="10" height="14" rx="2" /><rect x="10" y="3" width="10" height="14" rx="2" />
+  </svg>
+);
+const MoonIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" aria-hidden>
+    <path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z" />
+  </svg>
+);
+
+const PHASES: { label: string; steps: Step[]; icon: (p: { size?: number }) => JSX.Element; sub: string }[] = [
+  { label: "Upkeep", steps: ["Untap", "Upkeep"], icon: SunIcon, sub: "Untap, then upkeep" },
+  { label: "Draw", steps: ["Draw"], icon: DrawIcon, sub: "Draw a card" },
+  { label: "Main", steps: ["Main1"], icon: CrownIcon, sub: "Play a land, cast spells" },
+  { label: "Combat", steps: ["BeginCombat", "DeclareAttackers", "DeclareBlockers", "FirstStrikeDamage", "CombatDamage", "EndCombat"], icon: SwordIcon, sub: "Attack and block" },
+  { label: "Main 2", steps: ["Main2"], icon: ShieldIcon, sub: "Second main phase" },
+  { label: "End", steps: ["End", "Cleanup"], icon: MoonIcon, sub: "End of turn" },
 ];
+const phaseOf = (s: Step) => PHASES.findIndex((p) => p.steps.includes(s));
+
+const backClass = (s: Settings) => `card-back back-${s.back === "custom" && !s.customBack ? "sigil" : s.back}`;
+const backStyle = (s: Settings): React.CSSProperties | undefined =>
+  s.back === "custom" && s.customBack ? { backgroundImage: `url(${s.customBack})` } : undefined;
 
 const STEP_NAMES: Record<Step, string> = {
   Untap: "Untap", Upkeep: "Upkeep", Draw: "Draw", Main1: "Main phase", BeginCombat: "Beginning of combat",
@@ -75,6 +97,10 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const [fullControl, setFullControl] = useState(false);
   const [thinking, setThinking] = useState<number | null>(null);
   const [fast, setFast] = useState(false);
+  const [inspect, setInspect] = useState<CardView | null>(null);
+  const [layout, setLayout] = useState<"table" | "focus">(() => (view.players.length > 2 ? "table" : "focus"));
+  const [banner, setBanner] = useState<{ key: number; phase: number; who: string } | null>(null);
+  const settings = useSettings();
 
   const me = view.players[view.you];
   const opponents = view.players.filter((p) => !p.is_you);
@@ -142,6 +168,27 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     if (view.active !== view.you) setFocus(view.active);
   }, [view.active, view.you]);
 
+  // Announce each new phase with a short banner.
+  const phase = phaseOf(view.step);
+  const lastPhase = useRef<string>("");
+  useEffect(() => {
+    const k = `${view.turn}:${phase}`;
+    if (view.turn === 0 || k === lastPhase.current || phase < 0) return;
+    lastPhase.current = k;
+    const key = Date.now();
+    setBanner({ key, phase, who: view.players[view.active].name });
+    const t = setTimeout(() => setBanner((b) => (b?.key === key ? null : b)), 1100);
+    return () => clearTimeout(t);
+  }, [view.turn, phase, view.active, view.players]);
+
+  // Cards that just arrived in hand fly in from the library.
+  const seenHand = useRef<Set<number> | null>(null);
+  const drawn = new Set<number>();
+  if (seenHand.current) for (const c of view.hand) if (!seenHand.current.has(c.id)) drawn.add(c.id);
+  useEffect(() => {
+    seenHand.current = new Set(view.hand.map((c) => c.id));
+  }, [view.hand]);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
@@ -155,14 +202,24 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     setPickedBlocker(null);
   }, [kind, view.turn]);
 
-  // Auto-pass: when "End turn" is on, or when there's nothing meaningful to do and full control is off.
-  const nothingToDo =
-    view.hints.castable.length === 0 &&
-    view.hints.playable_lands.length === 0 &&
-    !view.hints.activatable.some(([id, i]) => {
+  // Auto-pass. Unless "Full control" is on, only stop when there's a real decision:
+  // your main phases when you can do something, a spell of someone else's you could answer,
+  // combat you're part of, and an opponent's end step, if you hold something you could cast.
+  const canAct =
+    view.hints.castable.length > 0 ||
+    view.hints.activatable.some(([id, i]) => {
       const c = view.battlefield.find((b) => b.id === id);
       return c?.abilities.find((a) => a.index === i && !a.is_mana);
     });
+  const meaningfulStop = (() => {
+    if (view.stack.length > 0) return view.stack[0].controller !== view.you && canAct;
+    const mine = view.active === view.you;
+    if (mine && (view.step === "Main1" || view.step === "Main2")) return canAct || view.hints.playable_lands.length > 0;
+    if (!canAct) return false;
+    const inCombat = view.battlefield.some((c) => c.attacking !== null && (c.attacking === view.you || c.controller === view.you));
+    if ((view.step === "DeclareAttackers" || view.step === "DeclareBlockers") && inCombat) return true;
+    return !mine && view.step === "End";
+  })();
   useEffect(() => {
     if (mode.kind !== "idle") return;
     const ending = endTurn !== null && endTurn === view.turn;
@@ -170,14 +227,16 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     let auto: Action | null = null;
     if (myPriority) {
       if (ending && view.stack.length === 0) auto = "Pass";
-      else if (!fullControl && nothingToDo && !(view.active === view.you && (view.step === "Main1" || view.step === "Main2") && view.stack.length === 0)) auto = "Pass";
-    } else if (view.your_decision && kind === "DeclareAttackers" && ending) {
+      else if (!fullControl && !meaningfulStop) auto = "Pass";
+    } else if (view.your_decision && kind === "DeclareAttackers" && (ending || (!fullControl && view.hints.attackers.length === 0))) {
       auto = { Attack: [] };
+    } else if (view.your_decision && kind === "DeclareBlockers" && !fullControl && view.hints.blockers.length === 0) {
+      auto = { Block: [] };
     }
     if (!auto) return;
-    const t = setTimeout(() => act(auto!), 260);
+    const t = setTimeout(() => act(auto!), 120);
     return () => clearTimeout(t);
-  }, [view, mode, endTurn, fullControl, nothingToDo, myPriority, kind, act]);
+  }, [view, mode, endTurn, fullControl, meaningfulStop, myPriority, kind, act]);
 
   // ---------------------------------------------------------------- targeting
   const currentSlot: Target[] | null = mode.kind === "target" ? mode.slots[mode.chosen.length] ?? null : null;
@@ -290,7 +349,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const renderRow = (cards: CardView[], cls: string) => (
     <div className={`row ${cls}`}>
       {cards.map((c) => (
-        <Card key={c.id} card={c} size="field" glow={glowFor(c)} onClick={() => clickPermanent(c)} onHover={setHover} badge={tagFor(c)} />
+        <Card key={c.id} card={c} size="field" glow={glowFor(c)} onClick={() => clickPermanent(c)} onHover={setHover} onInspect={setInspect} badge={tagFor(c)} />
       ))}
     </div>
   );
@@ -362,29 +421,59 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
         <div className="seat-tools">
           <label className="toggle"><input type="checkbox" checked={fullControl} onChange={(e) => setFullControl(e.target.checked)} /> Full control</label>
           <label className="toggle" title="Computer players take less time to think"><input type="checkbox" checked={fast} onChange={(e) => setFast(e.target.checked)} /> Fast opponents</label>
+          {opponents.length > 1 && (
+            <button className="ghost view-toggle" onClick={() => setLayout(layout === "table" ? "focus" : "table")} title="Switch between seeing every opponent and one at a time">
+              {layout === "table" ? "One opponent" : "All opponents"}
+            </button>
+          )}
           <button className="ghost" onClick={() => setLogOpen(!logOpen)} title="Game log"><ScrollIcon /></button>
           <button className="ghost" onClick={onExit}>Leave</button>
         </div>
       </header>
 
-      {/* Opponent board */}
-      <section className="board board-opp">
+      {/* Opponents: everyone at once, or one at a time */}
+      {layout === "table" && opponents.length > 1 ? (
+        <section className={`board-opps n${opponents.length}`}>
+          {opponents.map((p) => {
+            const r = rowsFor(p.id);
+            return (
+              <div key={p.id} className={`opp-panel theme-surface ${p.is_active ? "is-active" : ""} ${topIsTarget({ Player: p.id }) ? "glow-target" : ""} ${p.lost ? "lost" : ""}`}
+                data-theme={themeForSeat(p.id)}
+                onClick={() => (topIsTarget({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
+                <div className="opp-panel-head">
+                  <Sigil seat={p} size={30} />
+                  <div>
+                    <div className="seat-name">{p.name}{p.id === focused.id && kind === "DeclareAttackers" && view.your_decision ? " · attack target" : ""}</div>
+                    <div className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <><span className="bump" key={p.hand_count}>{p.hand_count}</span> in hand · {p.library_count} library · {p.graveyard.length} graveyard</>}</div>
+                  </div>
+                  <div className="opp-cmd">{p.command.map((c) => <Card key={c.id} card={c} size="mini" onHover={setHover} onInspect={setInspect} />)}</div>
+                  <span className="seat-life">{p.life}</span>
+                </div>
+                {renderRow([...r.lands, ...r.support], "row-back")}
+                {renderRow(r.front, "row-front")}
+              </div>
+            );
+          })}
+        </section>
+      ) : (
+      <section className="board board-opp theme-surface" data-theme={themeForSeat(focused.id)}>
         <Medallion seat={focused} position="top" targetable={topIsTarget({ Player: focused.id })} onClick={() => topIsTarget({ Player: focused.id }) && chooseTarget({ Player: focused.id })} />
         <div className="opp-side">
-          <div className="pile" title="Library">{focused.library_count}</div>
+          <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{focused.library_count}</div>
           <div className="pile pile-gy" title="Graveyard">{focused.graveyard.length}</div>
-          {focused.command.map((c) => <Card key={c.id} card={c} size="mini" onHover={setHover} />)}
+          {focused.command.map((c) => <Card key={c.id} card={c} size="mini" onHover={setHover} onInspect={setInspect} />)}
         </div>
         {renderRow([...opp.lands, ...opp.support], "row-back")}
         {renderRow(opp.front, "row-front")}
       </section>
+      )}
 
       {/* Divider with phase track */}
       <div className="divider">
         <div className="turn-label">Turn {view.turn} · {view.players[view.active].name}</div>
         <div className="phase-track">
           {PHASES.map((ph) => (
-            <span key={ph.label} className={`phase ${ph.steps.includes(view.step) ? "on" : ""}`}>{ph.label}</span>
+            <span key={ph.label + (ph.steps.includes(view.step) ? view.turn : "")} className={`phase ${ph.steps.includes(view.step) ? "on" : ""}`}><ph.icon size={12} />{ph.label}</span>
           ))}
         </div>
         <div className="step-name">{STEP_NAMES[view.step]}</div>
@@ -392,7 +481,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       </div>
 
       {/* My board */}
-      <section className="board board-me">
+      <section className="board board-me theme-surface" data-theme={settings.theme}>
         {renderRow(mine.front, "row-front")}
         {renderRow([...mine.lands, ...mine.support], "row-back")}
       </section>
@@ -402,7 +491,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
         <div className="dock-left">
           {myCommand.map((c) => (
             <div key={c.id} className="command-slot">
-              <Card card={c} size="mini" glow={view.hints.castable.includes(c.id) ? "play" : null} onClick={() => view.hints.castable.includes(c.id) && beginCast(c)} onHover={setHover} />
+              <Card card={c} size="mini" glow={view.hints.castable.includes(c.id) ? "play" : null} onClick={() => view.hints.castable.includes(c.id) && beginCast(c)} onHover={setHover} onInspect={setInspect} />
               <span className="slot-label">Command</span>
             </div>
           ))}
@@ -414,7 +503,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
             const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
             return (
               <Card key={c.id} card={c} size="hand" glow={playable && mode.kind === "idle" ? "play" : null} dim={mode.kind === "target"}
-                onClick={() => clickHand(c)} onHover={setHover}
+                onClick={() => clickHand(c)} onHover={setHover} onInspect={setInspect} className={drawn.has(c.id) ? "drawn" : undefined}
                 style={{ transform: `translateX(${offset * -18}px) rotate(${offset * 2.2}deg) translateY(${Math.abs(offset) * 4}px)`, zIndex: i }} />
             );
           })}
@@ -422,7 +511,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
         <Medallion seat={me} position="bottom" targetable={topIsTarget({ Player: me.id })} onClick={() => topIsTarget({ Player: me.id }) && chooseTarget({ Player: me.id })} />
         <div className="dock-right">
           <div className="piles">
-            <div className="pile" title="Library">{me.library_count}<small>Library</small></div>
+            <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{me.library_count}<small>Library</small></div>
             <div className="pile pile-gy" title="Graveyard">{me.graveyard.length}<small>Graveyard</small></div>
           </div>
           <div className="actions">
@@ -457,6 +546,20 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
           ))}
         </aside>
       )}
+
+      {banner && (() => {
+        const ph = PHASES[banner.phase];
+        return (
+          <div className="phase-banner" key={banner.key}>
+            <span className="ph-icon"><ph.icon size={20} /></span>
+            <span className="ph-text">
+              <span className="ph-title">{ph.label === "Upkeep" ? `${banner.who === "You" ? "Your" : `${banner.who}'s`} turn` : ph.label}</span>
+              <span className="ph-sub">{ph.label === "Upkeep" ? `Turn ${view.turn}` : ph.sub}</span>
+            </span>
+          </div>
+        );
+      })()}
+      {inspect && <RulesPopup card={inspect} onClose={() => setInspect(null)} />}
 
       {/* Hover preview */}
       {hover && <div className="preview-wrap"><CardPreview card={hover} /></div>}

@@ -68,3 +68,10 @@ export function TypeGlyph({ types, size = 24, className }: { types: string[]; si
   if (types.includes("Enchantment")) return <EnchantmentGlyph size={size} className={className} />;
   return <ArtifactGlyph size={size} className={className} />;
 }
+
+/** Tap symbol: a bent arrow turning a quarter turn clockwise. */
+export const TapIcon = ({ size = 14, className }: P) =>
+  svg(size, className, <>
+    <path d="M5 6h7a6 6 0 0 1 6 6v7" strokeWidth={2.4} />
+    <path d="M14.5 15.5 18 19l3.5-3.5" strokeWidth={2.4} />
+  </>);

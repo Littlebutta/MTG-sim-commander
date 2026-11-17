@@ -405,6 +405,7 @@ dependencies = [
 name = "commander-table"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "carddb",
  "client-api",
  "flate2",
@@ -416,6 +417,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tempfile",
+ "tokio",
  "zip",
 ]
 
