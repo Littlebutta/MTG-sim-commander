@@ -33,6 +33,7 @@ export function SetupScreen({ onBack, onStart }: { onBack: () => void; onStart: 
   const [opps, setOpps] = useState<Opp[]>(() =>
     shuffle(NAMES).slice(0, 3).map((name) => ({ name, deck: RANDOM_DECK, style: "Random" as const })),
   );
+  const [rewind, setRewind] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +69,7 @@ export function SetupScreen({ onBack, onStart }: { onBack: () => void; onStart: 
         const style = o.style === "Random" ? (["Aggressive", "Balanced", "Controlling"] as const)[Math.floor(Math.random() * 3)] : o.style;
         seats.push({ name: o.name, deck: await resolve(d, o.name), ai: style });
       }
-      onStart(await startGame(seats));
+      onStart(await startGame(seats, { rewind }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -119,6 +120,16 @@ export function SetupScreen({ onBack, onStart }: { onBack: () => void; onStart: 
             </div>
           ))}
           <p className="muted small">Computer players think through their plays with the full rules, size up who's winning, and remember who attacked them.</p>
+        </div>
+        <div className="menu-section">
+          <div className="menu-label">House rules</div>
+          <label className="check-row">
+            <input type="checkbox" checked={rewind} onChange={(e) => setRewind(e.target.checked)} />
+            <span>
+              <strong>Go back and respond</strong>
+              <span className="muted small"> Press Space to see the stack. If you let something resolve and change your mind, you can step back up to 2 items and respond after all.</span>
+            </span>
+          </label>
         </div>
         {error && <div className="form-error">{error}</div>}
         <button className="btn btn-primary big" disabled={busy || !myDeck} onClick={start}>{busy ? "Shuffling…" : "Start game"}</button>

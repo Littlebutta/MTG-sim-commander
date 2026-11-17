@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GameSession } from "../engine/session";
+import type { GameSession, RewindPoint } from "../engine/session";
 import type { Action, CardView, PlayerView, SeatView, Step, Target } from "../engine/types";
 import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
@@ -100,6 +100,8 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const [inspect, setInspect] = useState<CardView | null>(null);
   const [layout, setLayout] = useState<"table" | "focus">(() => (view.players.length > 2 ? "table" : "focus"));
   const [banner, setBanner] = useState<{ key: number; phase: number; who: string } | null>(null);
+  const [stackOpen, setStackOpen] = useState(false);
+  const [points, setPoints] = useState<RewindPoint[]>([]);
   const settings = useSettings();
 
   const me = view.players[view.you];
@@ -163,6 +165,39 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     };
   }, [view, kind, session, fast]);
 
+  // Space opens the stack: see everything waiting to resolve, hold priority, and (with the house
+  // rule on) step back to something you let go and respond after all.
+  useEffect(() => {
+    setPoints(session.rewindEnabled ? session.rewindPoints() : []);
+  }, [view, session]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (e.repeat) return;
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        setStackOpen((o) => !o);
+      } else if (e.code === "Escape") setStackOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const goBack = (p: RewindPoint) => {
+    const err = session.rewind(p.index);
+    if (err) {
+      setToast(err);
+      return;
+    }
+    setMode({ kind: "idle" });
+    setStackOpen(true);
+    const v = session.view();
+    lastPhase.current = `${v.turn}:${phaseOf(v.step)}`;
+    setView(v);
+    setToast(`Back to ${p.name}. Respond now, or let it resolve.`);
+  };
+
   // Watch whoever is taking their turn.
   useEffect(() => {
     if (view.active !== view.you) setFocus(view.active);
@@ -221,7 +256,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     return !mine && view.step === "End";
   })();
   useEffect(() => {
-    if (mode.kind !== "idle") return;
+    if (mode.kind !== "idle" || stackOpen) return;
     const ending = endTurn !== null && endTurn === view.turn;
     if (endTurn !== null && endTurn !== view.turn) setEndTurn(null);
     let auto: Action | null = null;
@@ -236,7 +271,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
     if (!auto) return;
     const t = setTimeout(() => act(auto!), 120);
     return () => clearTimeout(t);
-  }, [view, mode, endTurn, fullControl, meaningfulStop, myPriority, kind, act]);
+  }, [view, mode, endTurn, fullControl, meaningfulStop, myPriority, kind, act, stackOpen]);
 
   // ---------------------------------------------------------------- targeting
   const currentSlot: Target[] | null = mode.kind === "target" ? mode.slots[mode.chosen.length] ?? null : null;
@@ -426,6 +461,9 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
               {layout === "table" ? "One opponent" : "All opponents"}
             </button>
           )}
+          <button className={`ghost stack-key ${stackOpen ? "on" : ""}`} onClick={() => setStackOpen(!stackOpen)} title="See the stack and hold priority (Space)">
+            Stack{view.stack.length > 0 ? ` ${view.stack.length}` : ""} <kbd>Space</kbd>
+          </button>
           <button className="ghost" onClick={() => setLogOpen(!logOpen)} title="Game log"><ScrollIcon /></button>
           <button className="ghost" onClick={onExit}>Leave</button>
         </div>
@@ -529,7 +567,52 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
       </footer>
 
       {/* Stack */}
-      {view.stack.length > 0 && (
+      {stackOpen ? (
+        <aside className="stack stack-open" onClick={(e) => e.stopPropagation()}>
+          <div className="stack-head">
+            <div className="stack-title">Stack</div>
+            <span className="muted small">{myPriority ? "You have priority" : "Holding: you'll get a chance to act"}</span>
+            <button className="ghost" onClick={() => setStackOpen(false)} title="Close (Space)">✕</button>
+          </div>
+          {view.stack.length === 0 && <div className="stack-empty">Nothing is waiting to resolve.</div>}
+          {view.stack.map((s, i) => (
+            <div key={s.id} className={`stack-item ${i === 0 ? "top" : ""} ${topIsTarget({ Object: s.id }) ? "glow-target clickable" : ""}`}
+              onClick={() => topIsTarget({ Object: s.id }) && chooseTarget({ Object: s.id })}
+              onMouseEnter={() => s.card && setHover(s.card)} onMouseLeave={() => setHover(null)}>
+              <div className="stack-name">
+                <span>{i === 0 && <span className="stack-next">Next</span>}{s.name}{s.is_ability ? " — ability" : ""}</span>
+                {s.card && <ManaCost cost={s.card.mana_cost} />}
+              </div>
+              <div className="stack-meta">{view.players[s.controller].name}{s.targets.length ? ` → ${s.targets.join(", ")}` : ""}</div>
+              {(s.is_ability || !s.card) && <div className="stack-text">{s.text}</div>}
+            </div>
+          ))}
+          {session.rewindEnabled && (
+            <div className="rewind">
+              <div className="rewind-title">Go back and respond</div>
+              {points.length === 0 ? (
+                <div className="muted small">When you let something on the stack go, it shows up here. You can step back to the last {2} and respond after all.</div>
+              ) : (
+                points.map((p, i) => (
+                  <div key={`${p.turn}:${p.name}:${i}`} className="rewind-item">
+                    <div>
+                      <div className="stack-name"><span>{p.name}</span></div>
+                      <div className="stack-meta">{view.players[p.controller].name} · turn {p.turn}{i === 0 ? " · most recent" : ""}</div>
+                    </div>
+                    <button className="btn" onClick={() => goBack(p)}>Go back</button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+          <div className="stack-foot">
+            {mode.kind === "idle" && primary && kind === "Priority" && (
+              <button className="btn btn-primary" onClick={primary.action}>{primary.label}</button>
+            )}
+            <span className="muted small"><kbd>Space</kbd> to close</span>
+          </div>
+        </aside>
+      ) : view.stack.length > 0 && (
         <aside className="stack">
           <div className="stack-title">Stack</div>
           {view.stack.map((s, i) => (
@@ -544,6 +627,7 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
               {s.is_ability && <div className="stack-text">{s.text}</div>}
             </div>
           ))}
+          <div className="stack-hint"><kbd>Space</kbd> for more</div>
         </aside>
       )}
 

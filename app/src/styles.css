@@ -426,6 +426,34 @@ button { font: inherit; color: inherit; }
 .stack-item.top { border-color: color-mix(in srgb, var(--turn) 60%, transparent); background: rgba(255, 255, 255, 0.07); }
 .stack-name { display: flex; justify-content: space-between; gap: 8px; font: 600 13px var(--serif); }
 .stack-meta, .stack-text { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stack-hint { font-size: 11px; color: var(--muted); text-align: right; padding-top: 2px; }
+kbd {
+  display: inline-block; padding: 0 5px; border-radius: 4px; font: 600 10px var(--sans); line-height: 16px;
+  border: 1px solid var(--line); border-bottom-width: 2px; background: rgba(255, 255, 255, 0.06); color: var(--text);
+}
+.stack-open { width: 320px; max-height: 76vh; gap: 8px; padding: 12px; animation: stack-in 160ms ease-out; }
+@keyframes stack-in { from { opacity: 0; transform: translateY(-50%) translateX(12px); } }
+.stack-head { display: flex; align-items: center; gap: 8px; }
+.stack-head .stack-title { padding: 0; }
+.stack-head .muted { flex: 1; }
+.stack-head .ghost { padding: 2px 8px; }
+.stack-empty { font-size: 13px; color: var(--muted); padding: 10px 2px; }
+.stack-next {
+  font: 700 9px var(--sans); text-transform: uppercase; letter-spacing: 0.1em; color: var(--turn);
+  margin-right: 6px; vertical-align: 2px;
+}
+.rewind { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; display: flex; flex-direction: column; gap: 6px; }
+.rewind-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); }
+.rewind-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--line); background: rgba(255, 255, 255, 0.02);
+}
+.rewind-item .btn { padding: 5px 10px; font-size: 12px; }
+.stack-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.stack-key { display: inline-flex; align-items: center; gap: 6px; }
+.stack-key.on { color: var(--turn); }
+.check-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.45; }
+.check-row input { margin-top: 4px; }
 
 /* log */
 .log {
