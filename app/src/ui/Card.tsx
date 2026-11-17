@@ -152,6 +152,7 @@ export function Card({ card, size, glow, dim, onClick, onHover, onInspect, badge
         className ?? "",
       ].join(" ")}
       style={style}
+      data-obj={card.id}
       onClick={onClick}
       onMouseEnter={() => onHover?.(card)}
       onMouseLeave={() => onHover?.(null)}

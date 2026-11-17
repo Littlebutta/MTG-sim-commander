@@ -813,3 +813,34 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 .theme-name { font-weight: 600; font-size: 13px; }
 .upload-row { display: flex; align-items: center; gap: 10px; }
 .form-error.inline { margin: 0; padding: 6px 10px; }
+
+/* arrows and dragging */
+.arrow-layer { position: fixed; inset: 0; pointer-events: none; z-index: 30; overflow: visible; }
+.arrow-line { fill: none; stroke-width: 4; stroke-linecap: round; }
+.arrow-glow { fill: none; stroke-width: 12; stroke-linecap: round; opacity: 0.18; }
+.arrow-dot { opacity: 0.9; }
+.arrow.tone-attack .arrow-line, .arrow.tone-attack .arrow-glow { stroke: var(--danger); }
+.arrow.tone-incoming .arrow-line, .arrow.tone-incoming .arrow-glow { stroke: #ff8a7a; }
+.arrow.tone-incoming .arrow-line { stroke-width: 3; stroke-dasharray: 2 8; opacity: 0.85; }
+.arrow.tone-block .arrow-line, .arrow.tone-block .arrow-glow { stroke: #b48cff; }
+.arrow.tone-target .arrow-line, .arrow.tone-target .arrow-glow { stroke: #ffd166; }
+.arrow.tone-drag .arrow-line, .arrow.tone-drag .arrow-glow { stroke: #ffd166; }
+.arrow.tone-drag .arrow-line { stroke-dasharray: 10 8; animation: arrow-march 0.6s linear infinite; }
+.arrow.tone-drag.locked .arrow-line { stroke-dasharray: none; animation: none; }
+.arrow.tone-drag.locked .arrow-glow { opacity: 0.35; }
+.arrow-head.tone-attack, .arrow.tone-attack .arrow-dot { fill: var(--danger); }
+.arrow-head.tone-incoming, .arrow.tone-incoming .arrow-dot { fill: #ff8a7a; }
+.arrow-head.tone-block, .arrow.tone-block .arrow-dot { fill: #b48cff; }
+.arrow-head.tone-target, .arrow-head.tone-drag, .arrow.tone-target .arrow-dot, .arrow.tone-drag .arrow-dot { fill: #ffd166; }
+@keyframes arrow-march { to { stroke-dashoffset: -18; } }
+.drag-ghost {
+  position: fixed; z-index: 31; pointer-events: none;
+  transform: translate(-50%, -60%) rotate(-4deg) scale(1.04);
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.55));
+}
+.card.lifted { opacity: 0.35; }
+.table.dragging, .table.dragging * { cursor: grabbing !important; user-select: none; }
+.table .card { touch-action: none; }
+.glow-chosen { box-shadow: 0 0 0 2px #ffd166, 0 0 14px 2px rgba(255, 209, 102, 0.4) !important; }
+.opp-panel.glow-chosen, .seat.glow-chosen { border-color: #ffd166; }
+.btn-primary.is-waiting { opacity: 0.45; filter: saturate(0.5); }
