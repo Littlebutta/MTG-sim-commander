@@ -124,7 +124,7 @@ pub struct PlayerView {
     pub commander_return: bool,
 }
 
-fn type_names<T: std::fmt::Debug>(v: impl IntoIterator<Item = T>) -> Vec<String> {
+pub(crate) fn type_names<T: std::fmt::Debug>(v: impl IntoIterator<Item = T>) -> Vec<String> {
     v.into_iter().map(|t| format!("{t:?}")).collect()
 }
 

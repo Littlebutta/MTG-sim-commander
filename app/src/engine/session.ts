@@ -1,7 +1,7 @@
 // The local game session. Games run the Rust engine compiled to WebAssembly, both in the
 // browser during development and inside the desktop app.
 
-import init, { WasmSession, starter_decks, check_deck, resolve_deck } from "./pkg/engine_wasm.js";
+import init, { WasmSession, starter_decks, check_deck, resolve_deck, search_cards, recommend_cards, lookup_cards } from "./pkg/engine_wasm.js";
 import type { Action, PlayerView } from "./types";
 
 export interface PendingBot {
@@ -103,4 +103,19 @@ export async function checkDeckBuiltin(text: string) {
 export async function resolveDeckBuiltin(name: string, text: string): Promise<ResolvedDeck> {
   await engineReady();
   return JSON.parse(resolve_deck(name, text));
+}
+
+export async function searchCardsBuiltin(query: object): Promise<unknown> {
+  await engineReady();
+  return JSON.parse(search_cards(JSON.stringify(query)));
+}
+
+export async function recommendBuiltin(text: string): Promise<unknown> {
+  await engineReady();
+  return JSON.parse(recommend_cards(text));
+}
+
+export async function lookupBuiltin(names: string[]): Promise<unknown> {
+  await engineReady();
+  return JSON.parse(lookup_cards(JSON.stringify(names)));
 }

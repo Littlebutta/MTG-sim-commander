@@ -96,12 +96,17 @@ impl Pool {
 
     /// Run `f` with an index over the downloaded pool plus the starter cards.
     pub fn with_index<T>(&self, data: &Path, f: impl FnOnce(&CardIndex) -> T) -> T {
+        self.with_pool(data, |_, i| f(i))
+    }
+
+    /// Run `f` with the whole card pool and an index over it.
+    pub fn with_pool<T>(&self, data: &Path, f: impl FnOnce(&[CardRecord], &CardIndex) -> T) -> T {
         // Before the first download, only the starter cards are available.
         let all = self
             .load(data)
             .unwrap_or_else(|| Arc::new(client_api::starter_cards()));
         let index = CardIndex::new(&all);
-        f(&index)
+        f(&all, &index)
     }
 
     /// Download new card data if MTGJSON has published any.

@@ -7,6 +7,7 @@
 
 pub mod ai;
 mod bot;
+pub mod builder;
 pub mod decks;
 mod describe;
 mod view;
