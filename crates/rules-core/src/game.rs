@@ -93,6 +93,45 @@ pub struct Game {
     pub(crate) view_cache: Mutex<Option<(u64, Arc<View>)>>,
 }
 
+/// Games are cloned for "what if" simulations (practice AI), so cloning must be cheap:
+/// card definitions are shared, the characteristics cache is carried over, and the game log
+/// is not copied.
+impl Clone for Game {
+    fn clone(&self) -> Self {
+        Game {
+            players: self.players.clone(),
+            objects: self.objects.clone(),
+            battlefield: self.battlefield.clone(),
+            exile: self.exile.clone(),
+            command: self.command.clone(),
+            stack_cards: self.stack_cards.clone(),
+            stack: self.stack.clone(),
+            effects: self.effects.clone(),
+            pending_triggers: self.pending_triggers.clone(),
+            combat: self.combat.clone(),
+            turn: self.turn,
+            active: self.active,
+            step: self.step,
+            log: Vec::new(),
+            stage: self.stage.clone(),
+            decision: self.decision.clone(),
+            passes: self.passes,
+            pending_blockers: self.pending_blockers.clone(),
+            resume_after_triggers: self.resume_after_triggers.clone(),
+            lookback: self.lookback.clone(),
+            rng: self.rng.clone(),
+            next_object: self.next_object,
+            next_card: self.next_card,
+            next_timestamp: self.next_timestamp,
+            next_effect: self.next_effect,
+            starting_player: self.starting_player,
+            config: self.config.clone(),
+            version: self.version,
+            view_cache: Mutex::new(self.view_cache.lock().ok().and_then(|c| c.clone())),
+        }
+    }
+}
+
 impl Game {
     pub fn new_commander(config: GameConfig, decks: Vec<DeckSpec>) -> Game {
         let mut g = Game {
