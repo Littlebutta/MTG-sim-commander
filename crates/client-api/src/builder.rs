@@ -7,8 +7,8 @@
 
 use crate::view::type_names;
 use carddb::{parse_decklist, CardIndex, CardRecord};
-use rules_core::{Color, ColorSet, Supertype};
 use rules_core::CardType;
+use rules_core::{Color, ColorSet, Supertype};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -93,18 +93,66 @@ pub struct Recommendations {
 }
 
 const STAPLES: &[&str] = &[
-    "Sol Ring", "Arcane Signet", "Command Tower", "Mind Stone", "Fellwar Stone", "Thought Vessel",
-    "Commander's Sphere", "Cultivate", "Kodama's Reach", "Rampant Growth", "Farseek", "Nature's Lore",
-    "Three Visits", "Llanowar Elves", "Birds of Paradise", "Swords to Plowshares", "Path to Exile",
-    "Generous Gift", "Beast Within", "Chaos Warp", "Counterspell", "Swan Song", "Rhystic Study",
-    "Mystic Remora", "Cyclonic Rift", "Rapid Hybridization", "Night's Whisper", "Sign in Blood",
-    "Phyrexian Arena", "Read the Bones", "Toxic Deluge", "Damnation", "Wrath of God",
-    "Blasphemous Act", "Vandalblast", "Harmonize", "Beast Whisperer", "Guardian Project",
-    "Skullclamp", "Swiftfoot Boots", "Lightning Greaves", "Heroic Intervention",
-    "Teferi's Protection", "Esper Sentinel", "Smothering Tithe", "Infernal Grasp",
-    "Go for the Throat", "Feed the Swarm", "Krosan Grip", "Nature's Claim", "Return to Dust",
-    "Exotic Orchard", "Path of Ancestry", "Reliquary Tower", "Evolving Wilds",
-    "Terramorphic Expanse", "Divination", "Lightning Bolt", "Murder", "Doom Blade",
+    "Sol Ring",
+    "Arcane Signet",
+    "Command Tower",
+    "Mind Stone",
+    "Fellwar Stone",
+    "Thought Vessel",
+    "Commander's Sphere",
+    "Cultivate",
+    "Kodama's Reach",
+    "Rampant Growth",
+    "Farseek",
+    "Nature's Lore",
+    "Three Visits",
+    "Llanowar Elves",
+    "Birds of Paradise",
+    "Swords to Plowshares",
+    "Path to Exile",
+    "Generous Gift",
+    "Beast Within",
+    "Chaos Warp",
+    "Counterspell",
+    "Swan Song",
+    "Rhystic Study",
+    "Mystic Remora",
+    "Cyclonic Rift",
+    "Rapid Hybridization",
+    "Night's Whisper",
+    "Sign in Blood",
+    "Phyrexian Arena",
+    "Read the Bones",
+    "Toxic Deluge",
+    "Damnation",
+    "Wrath of God",
+    "Blasphemous Act",
+    "Vandalblast",
+    "Harmonize",
+    "Beast Whisperer",
+    "Guardian Project",
+    "Skullclamp",
+    "Swiftfoot Boots",
+    "Lightning Greaves",
+    "Heroic Intervention",
+    "Teferi's Protection",
+    "Esper Sentinel",
+    "Smothering Tithe",
+    "Infernal Grasp",
+    "Go for the Throat",
+    "Feed the Swarm",
+    "Krosan Grip",
+    "Nature's Claim",
+    "Return to Dust",
+    "Exotic Orchard",
+    "Path of Ancestry",
+    "Reliquary Tower",
+    "Evolving Wilds",
+    "Terramorphic Expanse",
+    "Divination",
+    "Lightning Bolt",
+    "Murder",
+    "Doom Blade",
 ];
 
 /// What a theme looks like in a commander's text, and in a card that supports it.
@@ -115,8 +163,16 @@ const THEMES: &[(&str, &[&str], &[&str])] = &[
     ("graveyard", &["graveyard"], &["graveyard"]),
     ("artifacts", &["artifact"], &["artifact"]),
     ("enchantments", &["enchantment"], &["enchantment"]),
-    ("instants and sorceries", &["instant or sorcery", "noncreature spell"], &["instant or sorcery", "noncreature spell"]),
-    ("life gain", &["gain life", "gains life", "lifelink"], &["gain", "life"]),
+    (
+        "instants and sorceries",
+        &["instant or sorcery", "noncreature spell"],
+        &["instant or sorcery", "noncreature spell"],
+    ),
+    (
+        "life gain",
+        &["gain life", "gains life", "lifelink"],
+        &["gain", "life"],
+    ),
     ("flying", &["flying"], &["flying"]),
     ("lands", &["landfall", "land enters"], &["land"]),
     ("attacking", &["attacks", "combat damage"], &["attacks"]),
@@ -149,15 +205,32 @@ pub fn roles(r: &CardRecord) -> Vec<Role> {
         return out;
     }
     let has = |n: &[&str]| n.iter().any(|x| t.contains(x));
-    if has(&["add {", "add one mana", "add two mana", "put a land card from your hand onto the battlefield"])
-        || (t.contains("search your library for") && t.contains("land card"))
+    if has(&[
+        "add {",
+        "add one mana",
+        "add two mana",
+        "put a land card from your hand onto the battlefield",
+    ]) || (t.contains("search your library for") && t.contains("land card"))
     {
         out.push(Role::Ramp);
     }
-    if has(&["draw a card", "draw two", "draw three", "draw cards", "draws a card", "draw x"]) {
+    if has(&[
+        "draw a card",
+        "draw two",
+        "draw three",
+        "draw cards",
+        "draws a card",
+        "draw x",
+    ]) {
         out.push(Role::Draw);
     }
-    if has(&["destroy all", "exile all", "damage to each creature", "all creatures get -", "each creature gets -"]) {
+    if has(&[
+        "destroy all",
+        "exile all",
+        "damage to each creature",
+        "all creatures get -",
+        "each creature gets -",
+    ]) {
         out.push(Role::Wipe);
     } else if has(&[
         "destroy target",
@@ -243,7 +316,9 @@ pub fn search(pool: &[CardRecord], q: &SearchQuery) -> Vec<CardSummary> {
                 Some((2, r))
             } else {
                 let s = summary_text(r);
-                text.split_whitespace().all(|w| s.contains(w)).then_some((4, r))
+                text.split_whitespace()
+                    .all(|w| s.contains(w))
+                    .then_some((4, r))
             }
         })
         .collect();
@@ -257,7 +332,11 @@ pub fn search(pool: &[CardRecord], q: &SearchQuery) -> Vec<CardSummary> {
 
 /// Summaries for the named cards that exist, in the order given.
 pub fn lookup(index: &CardIndex, names: &[String]) -> Vec<CardSummary> {
-    names.iter().filter_map(|n| index.get(n)).map(summary).collect()
+    names
+        .iter()
+        .filter_map(|n| index.get(n))
+        .map(summary)
+        .collect()
 }
 
 fn summary_text(r: &CardRecord) -> String {
@@ -274,7 +353,11 @@ fn summary_text(r: &CardRecord) -> String {
 }
 
 fn wants(stats: &DeckStats) -> [(Role, u32, &'static str); 6] {
-    let lands = if stats.avg_mv > 0.0 && stats.avg_mv < 2.6 { 35 } else { 37 };
+    let lands = if stats.avg_mv > 0.0 && stats.avg_mv < 2.6 {
+        35
+    } else {
+        37
+    };
     [
         (Role::Land, lands, "lands"),
         (Role::Ramp, 10, "ramp"),
@@ -299,8 +382,16 @@ fn have(stats: &DeckStats, r: Role) -> u32 {
 /// Statistics and suggestions for a decklist.
 pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommendations {
     let list = parse_decklist(text);
-    let commanders: Vec<&CardRecord> = list.commanders.iter().filter_map(|(_, n)| index.get(n)).collect();
-    let cards: Vec<(u32, &CardRecord)> = list.cards.iter().filter_map(|(n, name)| index.get(name).map(|r| (*n, r))).collect();
+    let commanders: Vec<&CardRecord> = list
+        .commanders
+        .iter()
+        .filter_map(|(_, n)| index.get(n))
+        .collect();
+    let cards: Vec<(u32, &CardRecord)> = list
+        .cards
+        .iter()
+        .filter_map(|(n, name)| index.get(name).map(|r| (*n, r)))
+        .collect();
     let in_deck: HashSet<&str> = commanders
         .iter()
         .map(|c| c.def.name.as_str())
@@ -312,7 +403,11 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
     let mut mv_total = 0u32;
     let mut nonland = 0u32;
     let mut pips: BTreeMap<char, u32> = BTreeMap::new();
-    for (n, r) in commanders.iter().map(|c| (1u32, *c)).chain(cards.iter().copied()) {
+    for (n, r) in commanders
+        .iter()
+        .map(|c| (1u32, *c))
+        .chain(cards.iter().copied())
+    {
         stats.cards += n;
         for role in roles(r) {
             let slot = match role {
@@ -337,9 +432,15 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
             }
         }
     }
-    stats.avg_mv = if nonland > 0 { mv_total as f32 / nonland as f32 } else { 0.0 };
+    stats.avg_mv = if nonland > 0 {
+        mv_total as f32 / nonland as f32
+    } else {
+        0.0
+    };
 
-    let identity = commanders.iter().fold(ColorSet::EMPTY, |a, c| a.union(c.def.color_identity));
+    let identity = commanders
+        .iter()
+        .fold(ColorSet::EMPTY, |a, c| a.union(c.def.color_identity));
     let mut rec = Recommendations {
         commanders: commanders.iter().map(|c| c.def.name.clone()).collect(),
         identity: letters(identity),
@@ -353,7 +454,9 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
         let text = if h + 1 < want {
             match role {
                 Role::Land => format!("{h} lands. Most Commander decks run about {want}."),
-                Role::Creature => format!("{h} creatures. Around {want} keeps a board to attack and block with."),
+                Role::Creature => {
+                    format!("{h} creatures. Around {want} keeps a board to attack and block with.")
+                }
                 _ => format!("{}: {h} so far. Aim for about {want}.", cap(label)),
             }
         } else if role == Role::Land && h > want + 3 {
@@ -361,19 +464,34 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
         } else {
             continue;
         };
-        rec.advice.push(Advice { role: Some(role), have: h, want, text });
+        rec.advice.push(Advice {
+            role: Some(role),
+            have: h,
+            want,
+            text,
+        });
     }
     let total_pips: u32 = pips.values().sum();
     if total_pips > 0 && stats.lands > 0 && identity.len() > 1 {
         let parts: Vec<String> = pips
             .iter()
-            .map(|(c, n)| format!("{} {}", (*n as f32 / total_pips as f32 * stats.lands as f32).round() as u32, color_word(*c)))
+            .map(|(c, n)| {
+                format!(
+                    "{} {}",
+                    (*n as f32 / total_pips as f32 * stats.lands as f32).round() as u32,
+                    color_word(*c)
+                )
+            })
             .collect();
         rec.advice.push(Advice {
             role: None,
             have: 0,
             want: 0,
-            text: format!("For your mana symbols, your {} lands should make roughly: {}.", stats.lands, parts.join(", ")),
+            text: format!(
+                "For your mana symbols, your {} lands should make roughly: {}.",
+                stats.lands,
+                parts.join(", ")
+            ),
         });
     }
     if stats.cards != 100 && !commanders.is_empty() {
@@ -381,26 +499,60 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
             role: None,
             have: stats.cards,
             want: 100,
-            text: if stats.cards < 100 { format!("{} more cards to reach 100.", 100 - stats.cards) } else { format!("{} cards over 100.", stats.cards - 100) },
+            text: if stats.cards < 100 {
+                format!("{} more cards to reach 100.", 100 - stats.cards)
+            } else {
+                format!("{} cards over 100.", stats.cards - 100)
+            },
         });
     }
     if commanders.is_empty() {
-        rec.advice.insert(0, Advice { role: None, have: 0, want: 1, text: "Pick a commander first. It sets your colors and what to look for.".into() });
+        rec.advice.insert(
+            0,
+            Advice {
+                role: None,
+                have: 0,
+                want: 1,
+                text: "Pick a commander first. It sets your colors and what to look for.".into(),
+            },
+        );
         return rec;
     }
 
     // Themes and creature types the commander cares about.
-    let ctext: String = commanders.iter().map(|c| c.def.oracle_text.to_lowercase()).collect::<Vec<_>>().join(" ");
-    let themes: Vec<&(&str, &[&str], &[&str])> = THEMES.iter().filter(|(_, needles, _)| needles.iter().any(|n| ctext.contains(n))).collect();
-    let all_types: BTreeSet<&str> = pool.iter().filter(|r| r.def.has_type(CardType::Creature)).flat_map(|r| r.def.subtypes.iter().map(String::as_str)).collect();
-    let raw: String = commanders.iter().map(|c| c.def.oracle_text.clone()).collect::<Vec<_>>().join(" ");
+    let ctext: String = commanders
+        .iter()
+        .map(|c| c.def.oracle_text.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let themes: Vec<&(&str, &[&str], &[&str])> = THEMES
+        .iter()
+        .filter(|(_, needles, _)| needles.iter().any(|n| ctext.contains(n)))
+        .collect();
+    let all_types: BTreeSet<&str> = pool
+        .iter()
+        .filter(|r| r.def.has_type(CardType::Creature))
+        .flat_map(|r| r.def.subtypes.iter().map(String::as_str))
+        .collect();
+    let raw: String = commanders
+        .iter()
+        .map(|c| c.def.oracle_text.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
     let tribes: BTreeSet<String> = raw
         .split(|c: char| !c.is_alphanumeric() && c != '-')
         .filter(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
         .map(|w| w.trim_end_matches('s').to_string())
-        .filter(|w| all_types.contains(w.as_str()) && !commanders.iter().any(|c| c.def.name.contains(w.as_str())))
+        .filter(|w| {
+            all_types.contains(w.as_str())
+                && !commanders.iter().any(|c| c.def.name.contains(w.as_str()))
+        })
         .collect();
-    rec.themes = themes.iter().map(|t| t.0.to_string()).chain(tribes.iter().cloned()).collect();
+    rec.themes = themes
+        .iter()
+        .map(|t| t.0.to_string())
+        .chain(tribes.iter().cloned())
+        .collect();
 
     // Score every card that could go in.
     let need = |r: Role| -> f32 {
@@ -427,8 +579,15 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
             let w = match role {
                 Role::Land => {
                     // Only lands that help this deck's colors.
-                    let fixes = t.contains("any color") || identity.iter().any(|c| t.contains(&format!("{{{}}}", c.letter())));
-                    if fixes { 2.0 } else { 0.0 }
+                    let fixes = t.contains("any color")
+                        || identity
+                            .iter()
+                            .any(|c| t.contains(&format!("{{{}}}", c.letter())));
+                    if fixes {
+                        2.0
+                    } else {
+                        0.0
+                    }
                 }
                 Role::Creature => 1.2,
                 _ => 3.0,
@@ -440,12 +599,18 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
         }
         let mut reason = best.filter(|b| b.0 > 0.0).map(|(_, role)| {
             let (_, want, label) = wants(&stats).into_iter().find(|w| w.0 == role).unwrap();
-            format!("{}: {} so far, aim for about {want}.", cap(label), have(&stats, role))
+            format!(
+                "{}: {} so far, aim for about {want}.",
+                cap(label),
+                have(&stats, role)
+            )
         });
         let mut matched = Vec::new();
         for (label, _, signs) in &themes {
             let hit = if *label == "instants and sorceries" {
-                d.has_type(CardType::Instant) || d.has_type(CardType::Sorcery) || signs.iter().any(|s| t.contains(s))
+                d.has_type(CardType::Instant)
+                    || d.has_type(CardType::Sorcery)
+                    || signs.iter().any(|s| t.contains(s))
             } else {
                 signs.iter().all(|s| t.contains(s))
             };
@@ -481,7 +646,11 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
         let Some(reason) = reason else { continue };
         scored.push((score, best.map(|b| b.1), reason, r));
     }
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap().then_with(|| a.3.def.name.cmp(&b.3.def.name)));
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap()
+            .then_with(|| a.3.def.name.cmp(&b.3.def.name))
+    });
 
     // A few for each thing the deck is short of, then the best of the rest.
     let mut picked: HashSet<String> = HashSet::new();
@@ -495,14 +664,20 @@ pub fn recommend(text: &str, pool: &[CardRecord], index: &CardIndex) -> Recommen
             continue;
         }
         *n += 1;
-        rec.picks.push(Suggestion { card: summary(r), role: *role, reason: reason.clone() });
+        rec.picks.push(Suggestion {
+            card: summary(r),
+            role: *role,
+            reason: reason.clone(),
+        });
     }
     rec
 }
 
 fn cap(s: &str) -> String {
     let mut c = s.chars();
-    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
 }
 
 fn color_word(c: char) -> &'static str {
@@ -523,12 +698,34 @@ mod tests {
     #[test]
     fn search_finds_by_name_and_respects_identity() {
         let pool = starter_cards();
-        let hits = search(&pool, &SearchQuery { text: "sol ring".into(), ..Default::default() });
+        let hits = search(
+            &pool,
+            &SearchQuery {
+                text: "sol ring".into(),
+                ..Default::default()
+            },
+        );
         assert_eq!(hits[0].name, "Sol Ring");
         assert!(hits[0].roles.contains(&Role::Ramp));
-        let green = search(&pool, &SearchQuery { identity: Some("G".into()), limit: Some(500), ..Default::default() });
-        assert!(green.iter().all(|c| c.color_identity.chars().all(|ch| ch == 'G')));
-        let cmdrs = search(&pool, &SearchQuery { commanders_only: true, limit: Some(500), ..Default::default() });
+        let green = search(
+            &pool,
+            &SearchQuery {
+                identity: Some("G".into()),
+                limit: Some(500),
+                ..Default::default()
+            },
+        );
+        assert!(green
+            .iter()
+            .all(|c| c.color_identity.chars().all(|ch| ch == 'G')));
+        let cmdrs = search(
+            &pool,
+            &SearchQuery {
+                commanders_only: true,
+                limit: Some(500),
+                ..Default::default()
+            },
+        );
         assert!(!cmdrs.is_empty() && cmdrs.iter().all(|c| c.can_be_commander));
     }
 
@@ -554,7 +751,11 @@ mod tests {
         let id = parse_identity(&rec.identity);
         for p in &rec.picks {
             assert!(!in_deck.contains(&p.card.name));
-            assert!(parse_identity(&p.card.color_identity).is_subset_of(id), "{} outside identity", p.card.name);
+            assert!(
+                parse_identity(&p.card.color_identity).is_subset_of(id),
+                "{} outside identity",
+                p.card.name
+            );
         }
         // Without a commander, it asks for one.
         let none = recommend("1 Sol Ring", &pool, &index);
