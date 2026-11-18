@@ -359,6 +359,73 @@ fn target_spec(phrase: &str) -> Option<TargetSpec> {
         "target creature card from your graveyard" => {
             TargetSpec::CardInGraveyard(Filter::creatures().yours())
         }
+        "target creature spell" => TargetSpec::Spell(Filter::creatures()),
+        "target noncreature spell" => TargetSpec::Spell(Filter {
+            not_types: vec![CardType::Creature],
+            ..Default::default()
+        }),
+        "target instant or sorcery spell" => {
+            TargetSpec::Spell(f(&[CardType::Instant, CardType::Sorcery]))
+        }
+        "target artifact or creature" => {
+            TargetSpec::Permanent(f(&[CardType::Artifact, CardType::Creature]))
+        }
+        _ => return creature_with_qualities(phrase),
+    })
+}
+
+/// "target nonblack creature", "target creature with flying", "target white creature".
+fn creature_with_qualities(phrase: &str) -> Option<TargetSpec> {
+    let rest = phrase.strip_prefix("target ")?;
+    let (rest, keyword) = match rest.split_once(" with ") {
+        Some((r, k)) => (r, Some(Keyword::parse(k)?)),
+        None => (rest, None),
+    };
+    let rest = rest.strip_suffix("creature")?.trim();
+    let mut f = Filter {
+        keyword,
+        ..Filter::creatures()
+    };
+    if !rest.is_empty() {
+        let (neg, col) = match rest.strip_prefix("non") {
+            Some(c) => (true, c),
+            None => (false, rest),
+        };
+        let c = color_word(col)?;
+        if neg {
+            f.not_colors = Some(ColorSet::of(&[c]));
+        } else {
+            f.colors = Some(ColorSet::of(&[c]));
+        }
+    }
+    if f == Filter::creatures() {
+        return None;
+    }
+    Some(TargetSpec::Permanent(f))
+}
+
+fn color_word(w: &str) -> Option<Color> {
+    Some(match w {
+        "white" => Color::White,
+        "blue" => Color::Blue,
+        "black" => Color::Black,
+        "red" => Color::Red,
+        "green" => Color::Green,
+        _ => return None,
+    })
+}
+
+/// A group of permanents named by an effect: "creatures you control", "all creatures".
+fn group_filter(who: &str) -> Option<Filter> {
+    Some(match who {
+        "creatures you control" => Filter::creatures().yours(),
+        "other creatures you control" => Filter::creatures().yours().other(),
+        "all creatures" => Filter::creatures(),
+        "creatures your opponents control" => Filter {
+            controller: Some(PlayerRef::Opponents),
+            ..Filter::creatures()
+        },
+        "all other creatures" => Filter::creatures().other(),
         _ => return None,
     })
 }
@@ -377,11 +444,16 @@ pub fn parse_effects(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Vec<Effec
         .map(|x| x.trim().trim_end_matches('.'))
         .filter(|x| !x.is_empty())
     {
-        for part in sentence
-            .split(", then ")
-            .flat_map(|p| p.split(" and you ").map(str::to_string).collect::<Vec<_>>())
-        {
-            out.push(parse_effect(part.trim(), targets)?);
+        // The engine has no regeneration, so "can't be regenerated" never changes anything.
+        if matches!(
+            sentence,
+            "they can't be regenerated" | "it can't be regenerated"
+        ) {
+            continue;
+        }
+        let mut subject: Option<PlayerRef> = None;
+        for part in sentence.split(", then ") {
+            out.append(&mut parse_clause(part.trim(), targets, &mut subject)?);
         }
     }
     if out.is_empty() {
@@ -391,8 +463,107 @@ pub fn parse_effects(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Vec<Effec
     }
 }
 
+/// One clause, which may join two effects with "and" ("you draw a card and you lose 1 life",
+/// "target player draws two cards and loses 2 life").
+fn parse_clause(
+    s: &str,
+    targets: &mut Vec<TargetSpec>,
+    subject: &mut Option<PlayerRef>,
+) -> Option<Vec<Effect>> {
+    let mark = targets.len();
+    if let Some(e) = parse_player_effect(s, targets, subject) {
+        return Some(vec![e]);
+    }
+    targets.truncate(mark);
+    if let Some(e) = parse_effect(s, targets) {
+        return Some(vec![e]);
+    }
+    targets.truncate(mark);
+    // Try each " and " as the join between two effects.
+    let mut from = 0;
+    while let Some(i) = s[from..].find(" and ") {
+        let at = from + i;
+        let (a, b) = (&s[..at], &s[at + 5..]);
+        let saved = *subject;
+        if let Some(mut first) = parse_clause(a, targets, subject) {
+            if let Some(mut second) = parse_clause(b, targets, subject) {
+                first.append(&mut second);
+                return Some(first);
+            }
+        }
+        targets.truncate(mark);
+        *subject = saved;
+        from = at + 5;
+    }
+    None
+}
+
+/// Effects on a player: draw, gain or lose life, mill. The subject carries over to a following
+/// clause with no subject of its own ("target player draws two cards and loses 2 life").
+fn parse_player_effect(
+    s: &str,
+    targets: &mut Vec<TargetSpec>,
+    subject: &mut Option<PlayerRef>,
+) -> Option<Effect> {
+    let (who, rest) = if let Some(r) = s.strip_prefix("you ") {
+        (PlayerRef::You, r)
+    } else if let Some(r) = s.strip_prefix("target player ") {
+        targets.push(TargetSpec::Player);
+        (PlayerRef::Target(targets.len() - 1), r)
+    } else if let Some(r) = s.strip_prefix("target opponent ") {
+        targets.push(TargetSpec::Opponent);
+        (PlayerRef::Target(targets.len() - 1), r)
+    } else if let Some(r) = s.strip_prefix("each opponent ") {
+        (PlayerRef::Opponents, r)
+    } else if let Some(r) = s.strip_prefix("each player ") {
+        (PlayerRef::Each, r)
+    } else {
+        (subject.unwrap_or(PlayerRef::You), s)
+    };
+    let verb = |r: &str, v: &str| {
+        r.strip_prefix(&format!("{v}s "))
+            .or_else(|| r.strip_prefix(&format!("{v} ")))
+            .map(str::to_string)
+    };
+    let e = if let Some(r) = verb(rest, "draw") {
+        let n = r.strip_suffix(" cards").or(r.strip_suffix(" card"))?;
+        Effect::DrawCards {
+            who,
+            amount: amount(n)?,
+        }
+    } else if let Some(r) = verb(rest, "gain") {
+        Effect::GainLife {
+            who,
+            amount: amount(r.strip_suffix(" life")?)?,
+        }
+    } else if let Some(r) = verb(rest, "lose") {
+        Effect::LoseLife {
+            who,
+            amount: amount(r.strip_suffix(" life")?)?,
+        }
+    } else if let Some(r) = verb(rest, "mill") {
+        Effect::Mill {
+            who,
+            amount: amount(r.strip_suffix(" cards").or(r.strip_suffix(" card"))?)?,
+        }
+    } else {
+        return None;
+    };
+    *subject = Some(who);
+    Some(e)
+}
+
 fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
     let s = s.strip_prefix("you ").unwrap_or(s);
+    // In a permanent's own ability, "it" is the permanent itself.
+    let owned;
+    let s = match s.strip_prefix("it deals ") {
+        Some(r) => {
+            owned = format!("~ deals {r}");
+            owned.as_str()
+        }
+        None => s,
+    };
     let words: Vec<&str> = s.split_whitespace().collect();
     // draw
     if let Some(rest) = s.strip_prefix("draw ") {
@@ -497,36 +668,10 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
             });
         }
     }
-    // "target creature gets +3/+3 until end of turn"
-    if let Some((who, rest)) = s.split_once(" gets ") {
-        let (pt, dur) = rest.split_once(" until end of turn")?;
-        if !dur.is_empty() {
-            return None;
-        }
-        let (p, t) = parse_pt_mod(pt)?;
-        let affected = if who == "~" {
-            Affected::ThisObject
-        } else {
-            Affected::Target(push_target(targets, who)?)
-        };
-        return Some(Effect::ApplyContinuous {
-            affected,
-            mods: vec![Modification::ModifyPT(p, t)],
-            duration: Duration::EndOfTurn,
-        });
-    }
-    if let Some((who, rest)) = s.split_once(" gains ") {
-        let k = Keyword::parse(rest.strip_suffix(" until end of turn")?)?;
-        let affected = if who == "~" {
-            Affected::ThisObject
-        } else {
-            Affected::Target(push_target(targets, who)?)
-        };
-        return Some(Effect::ApplyContinuous {
-            affected,
-            mods: vec![Modification::AddKeyword(k)],
-            duration: Duration::EndOfTurn,
-        });
+    // "target creature gets +3/+3 until end of turn", "creatures you control get +2/+1 and
+    // gain trample until end of turn", "~ gains flying until end of turn".
+    if let Some(e) = parse_until_eot(s, targets) {
+        return Some(e);
     }
     // "put a +1/+1 counter on ~" / "put two +1/+1 counters on target creature"
     if words.first() == Some(&"put") && s.contains("+1/+1 counter") {
@@ -562,6 +707,57 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
         };
     }
     None
+}
+
+fn parse_until_eot(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
+    let body = s.strip_suffix(" until end of turn")?;
+    let mut split = None;
+    for v in [" gets ", " get ", " gains ", " gain "] {
+        if let Some(i) = body.find(v) {
+            if split.is_none_or(|(j, _): (usize, &str)| i < j) {
+                split = Some((i, v));
+            }
+        }
+    }
+    let (i, v) = split?;
+    let who = &body[..i];
+    let rest = &body[i + v.len()..];
+    let mut mods = Vec::new();
+    let (pt, kws) = if v.contains("get") {
+        match rest.split_once(" and ") {
+            Some((pt, k)) => (
+                Some(pt),
+                Some(
+                    k.strip_prefix("gains ")
+                        .or_else(|| k.strip_prefix("gain "))?,
+                ),
+            ),
+            None => (Some(rest), None),
+        }
+    } else {
+        (None, Some(rest))
+    };
+    if let Some(pt) = pt {
+        let (p, t) = parse_pt_mod(pt)?;
+        mods.push(Modification::ModifyPT(p, t));
+    }
+    if let Some(k) = kws {
+        for kw in k.split(" and ").flat_map(|x| x.split(", ")) {
+            mods.push(Modification::AddKeyword(Keyword::parse(kw)?));
+        }
+    }
+    let affected = if who == "~" || who == "it" {
+        Affected::ThisObject
+    } else if let Some(f) = group_filter(who) {
+        Affected::Filter(f)
+    } else {
+        Affected::Target(push_target(targets, who)?)
+    };
+    Some(Effect::ApplyContinuous {
+        affected,
+        mods,
+        duration: Duration::EndOfTurn,
+    })
 }
 
 fn parse_token(rest: &str) -> Option<Effect> {
@@ -726,5 +922,78 @@ mod tests {
             "Whenever the moon is full, swap hands with an opponent.",
         );
         assert!(!d.fully_supported());
+    }
+
+    #[test]
+    fn player_subjects_carry_across_and() {
+        let d = def(
+            "Sign in Blood",
+            &[CardType::Sorcery],
+            "Target player draws two cards and loses 2 life.",
+        );
+        assert_eq!(d.spell_targets, vec![TargetSpec::Player]);
+        assert_eq!(
+            d.spell_effects,
+            vec![
+                Effect::DrawCards {
+                    who: PlayerRef::Target(0),
+                    amount: Amount::Fixed(2)
+                },
+                Effect::LoseLife {
+                    who: PlayerRef::Target(0),
+                    amount: Amount::Fixed(2)
+                },
+            ]
+        );
+        let d = def(
+            "Overseer",
+            &[CardType::Creature],
+            "When this creature enters, you gain 1 life and draw a card.",
+        );
+        assert!(d.fully_supported());
+    }
+
+    #[test]
+    fn colored_and_keyword_targets_and_group_pumps() {
+        let d = def(
+            "Doom Blade",
+            &[CardType::Instant],
+            "Destroy target nonblack creature.",
+        );
+        match &d.spell_targets[0] {
+            TargetSpec::Permanent(f) => {
+                assert_eq!(f.not_colors, Some(ColorSet::of(&[Color::Black])))
+            }
+            t => panic!("{t:?}"),
+        }
+        let d = def(
+            "Plummet",
+            &[CardType::Instant],
+            "Destroy target creature with flying.",
+        );
+        assert!(
+            matches!(&d.spell_targets[0], TargetSpec::Permanent(f) if f.keyword == Some(Keyword::Flying))
+        );
+        let d = def(
+            "Overrun",
+            &[CardType::Sorcery],
+            "Creatures you control get +3/+3 and gain trample until end of turn.",
+        );
+        assert!(matches!(
+            &d.spell_effects[0],
+            Effect::ApplyContinuous { affected: Affected::Filter(_), mods, .. } if mods.len() == 2
+        ));
+        let d = def(
+            "Kavu",
+            &[CardType::Creature],
+            "When this creature enters, it deals 4 damage to target creature.",
+        );
+        assert!(d.fully_supported());
+        let d = def(
+            "Wrath",
+            &[CardType::Sorcery],
+            "Destroy all creatures. They can't be regenerated.",
+        );
+        assert!(d.fully_supported());
     }
 }

@@ -45,6 +45,7 @@ pub fn bot_action(g: &Game, me: PlayerId) -> Action {
         }
         Decision::DeclareAttackers { .. } => attack(g, me),
         Decision::DeclareBlockers { .. } => block(g, me),
+        Decision::AssignCombatDamage { suggested, .. } => Action::AssignDamage(suggested),
         Decision::Discard { count, .. } => {
             let view = g.view();
             let mut hand = g.hand(me).to_vec();

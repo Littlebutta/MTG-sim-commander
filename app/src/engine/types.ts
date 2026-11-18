@@ -12,8 +12,21 @@ export type Decision =
   | { PutTriggersOnStack: { player: number; count: number } }
   | { DeclareAttackers: { player: number } }
   | { DeclareBlockers: { player: number } }
+  | { AssignCombatDamage: AssignDamageDecision }
   | { Discard: { player: number; count: number } }
   | { GameOver: { winner: number | null } };
+
+export interface AssignDamageDecision {
+  player: number;
+  attacker: number;
+  defender: number;
+  power: number;
+  trample: boolean;
+  deathtouch: boolean;
+  /** Each blocker with the damage that is lethal for it. */
+  blockers: [number, number][];
+  suggested: [Target, number][];
+}
 
 export type Action =
   | "Pass"
@@ -27,6 +40,8 @@ export type Action =
   | { OrderTriggers: [number, Target[]][] }
   | { Attack: [number, number][] }
   | { Block: [number, number][] }
+  | { AssignDamage: [Target, number][] }
+  | { UndoMana: number }
   | { Discard: number[] }
   | { SetCommanderReturn: boolean };
 
@@ -75,6 +90,7 @@ export interface CardView {
 export interface SeatView {
   id: number;
   name: string;
+  mulligans?: number;
   life: number;
   poison: number;
   hand_count: number;
@@ -119,6 +135,8 @@ export interface Hints {
   triggers: TriggerChoiceView[];
   discard_count: number;
   mulligan_bottom: number;
+  /** Tapped permanents whose unspent mana can be taken back. */
+  undo_mana: number[];
 }
 
 export interface PlayerView {

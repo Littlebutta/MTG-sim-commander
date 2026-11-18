@@ -184,6 +184,10 @@ impl Brain {
             Decision::PutTriggersOnStack { count, .. } => self.triggers(g, count),
             Decision::DeclareAttackers { .. } => self.attack(g),
             Decision::DeclareBlockers { .. } => self.block(g),
+            Decision::AssignCombatDamage { suggested, .. } => Decided {
+                action: Action::AssignDamage(suggested),
+                think_ms: 500,
+            },
             Decision::Discard { count, .. } => self.discard(g, count),
             Decision::GameOver { .. } => Decided {
                 action: Action::Pass,

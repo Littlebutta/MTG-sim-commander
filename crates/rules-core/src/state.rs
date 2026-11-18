@@ -161,6 +161,12 @@ pub struct Combat {
     pub blocked: Vec<ObjectId>,
     /// Creatures that dealt first-strike damage (CR 510.4).
     pub dealt_first_strike: Vec<ObjectId>,
+    /// Blocked attackers still to have their damage assignment chosen this step.
+    #[serde(default)]
+    pub damage_queue: std::collections::VecDeque<ObjectId>,
+    /// Damage assignments chosen this step (CR 510.1c).
+    #[serde(default)]
+    pub damage_plan: Vec<(ObjectId, Vec<(Target, i32)>)>,
 }
 
 /// A triggered ability waiting to be put on the stack (CR 603.3).

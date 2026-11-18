@@ -5,7 +5,7 @@ import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
 import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
 import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
-import { DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
+import { DamageModal, DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
 import { ArrowLayer, anchorEl, elementAtPointer, type ArrowSpec } from "./Arrows";
 
 type Mode =
@@ -87,6 +87,59 @@ function Medallion({ seat, targetable, onClick, position }: { seat: SeatView; ta
   );
 }
 
+const HeartIcon = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.2 0 3.6 1.2 5.2 3 1.6-1.8 3-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" />
+  </svg>
+);
+
+/** Life total, sitting right by the player's name so it reads as theirs. */
+function LifePill({ life, big }: { life: number; big?: boolean }) {
+  return (
+    <span className={`life-pill ${big ? "big" : ""} ${life <= 10 ? "low" : ""}`} title="Life total">
+      <HeartIcon size={big ? 13 : 11} />
+      <span className="bump" key={life}>{life}</span>
+    </span>
+  );
+}
+
+/** A player's command zone, framed and labeled so it can't be mistaken for the battlefield. */
+function CommandZone({ cards, onHover, onInspect, mine, castable, onCast }: {
+  cards: CardView[]; onHover: (c: CardView | null) => void; onInspect: (c: CardView) => void;
+  mine?: boolean; castable?: number[]; onCast?: (c: CardView) => void;
+}) {
+  return (
+    <div className={`cmd-zone ${mine ? "mine" : ""} ${cards.length === 0 ? "empty" : ""}`}
+      title={mine ? "Your command zone: cast your commander from here" : "Command zone: their commander waits here until it's cast"}>
+      <span className="cmd-zone-label"><CrownIcon size={10} /> Command zone</span>
+      <div className="cmd-zone-cards">
+        {cards.length === 0 ? <span className="cmd-zone-out">Commander is out</span> : cards.map((c) => (
+          <Card key={c.id} card={c} size="mini" glow={castable?.includes(c.id) ? "play" : null}
+            onClick={onCast && castable?.includes(c.id) ? () => onCast(c) : undefined} onHover={onHover} onInspect={onInspect} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Instants and flash cards you've asked not to pause the game for (right-click a card in hand).
+const QUIET_KEY = "ct-quiet-cards";
+function loadQuiet(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(QUIET_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function saveQuiet(s: Set<string>) {
+  try {
+    localStorage.setItem(QUIET_KEY, JSON.stringify([...s]));
+  } catch {
+    /* private window: the choice lasts for this session only */
+  }
+}
+const isInstantSpeed = (c: CardView) => c.types.includes("Instant") || c.keywords.includes("Flash");
+
 // The engine writes "<name> casts X."; for the local player, whose seat is "You", say "You cast X."
 const VERBS: Record<string, string> = {
   casts: "cast", plays: "play", mulligans: "mulligan", concedes: "concede", loses: "lose", wins: "win", goes: "go",
@@ -115,7 +168,20 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const [banner, setBanner] = useState<{ key: number; phase: number; who: string } | null>(null);
   const [stackOpen, setStackOpen] = useState(false);
   const [points, setPoints] = useState<RewindPoint[]>([]);
+  const [quiet, setQuiet] = useState<Set<string>>(loadQuiet);
+  const [castPop, setCastPop] = useState<{ id: number; closed: boolean } | null>(null);
+  // Your own battlefield, arranged the way you like: card ids per row, in order.
+  const [arranged, setArranged] = useState<{ front: number[]; back: number[] }>({ front: [], back: [] });
+  // Your hand, in the order you've dragged it into. New cards join on the right.
+  const [handOrder, setHandOrder] = useState<number[]>([]);
   const settings = useSettings();
+  const toggleQuiet = (name: string) => {
+    const next = new Set(quiet);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    saveQuiet(next);
+    setQuiet(next);
+  };
   const onExit = () => {
     session.leave?.();
     exitTable();
@@ -262,21 +328,38 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   // Auto-pass. Unless "Full control" is on, only stop when there's a real decision:
   // your main phases when you can do something, a spell of someone else's you could answer,
   // combat you're part of, and an opponent's end step, if you hold something you could cast.
-  const canAct =
-    view.hints.castable.length > 0 ||
-    view.hints.activatable.some(([id, i]) => {
-      const c = view.battlefield.find((b) => b.id === id);
-      return c?.abilities.find((a) => a.index === i && !a.is_mana);
+  const usableAbility = view.hints.activatable.some(([id, i]) => {
+    const c = view.battlefield.find((b) => b.id === id);
+    return c?.abilities.find((a) => a.index === i && !a.is_mana);
+  });
+  const canAct = view.hints.castable.length > 0 || usableAbility;
+  // Responding outside your main phase: cards you've silenced (right-click) don't count.
+  const canRespond =
+    usableAbility ||
+    view.hints.castable.some((id) => {
+      const c = view.hand.find((h) => h.id === id) ?? me.command.find((h) => h.id === id);
+      return !c || !quiet.has(c.name);
     });
   const meaningfulStop = (() => {
-    if (view.stack.length > 0) return view.stack[0].controller !== view.you && canAct;
+    if (view.stack.length > 0) return view.stack[0].controller !== view.you && canRespond;
     const mine = view.active === view.you;
     if (mine && (view.step === "Main1" || view.step === "Main2")) return canAct || view.hints.playable_lands.length > 0;
-    if (!canAct) return false;
+    if (!canRespond) return false;
     const inCombat = view.battlefield.some((c) => c.attacking !== null && (c.attacking === view.you || c.controller === view.you));
     if ((view.step === "DeclareAttackers" || view.step === "DeclareBlockers") && inCombat) return true;
     return !mine && view.step === "End";
   })();
+  // Someone else casts a spell you could answer: show it big for a moment.
+  const top = view.stack[0];
+  useEffect(() => {
+    if (!top || top.controller === view.you || !top.card || top.is_ability || !canRespond) return;
+    setCastPop((p) => (p?.id === top.id ? p : { id: top.id, closed: false }));
+    const id = top.id;
+    const t = setTimeout(() => setCastPop((p) => (p?.id === id ? { id, closed: true } : p)), 4500);
+    return () => clearTimeout(t);
+  }, [top?.id, top?.controller, view.you, canRespond]); // eslint-disable-line react-hooks/exhaustive-deps
+  const popItem = castPop && !castPop.closed ? view.stack.find((x) => x.id === castPop.id && x.card) : undefined;
+
   useEffect(() => {
     if (mode.kind !== "idle" || stackOpen) return;
     const ending = endTurn !== null && endTurn === view.turn;
@@ -408,6 +491,10 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       chooseTarget({ Object: c.id });
       return;
     }
+    if (view.hints.undo_mana.includes(c.id)) {
+      act({ UndoMana: c.id });
+      return;
+    }
     if (kind === "DeclareAttackers" && view.your_decision && view.hints.attackers.includes(c.id)) {
       const next = new Map(attacks);
       if (next.has(c.id)) next.delete(c.id);
@@ -450,18 +537,43 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   // ---------------------------------------------------------------- dragging
   // Press on something you can use and drag: a card from hand onto the table (or straight onto
   // its target), an attacker onto a player, a blocker onto an attacker. A short press is a click.
-  type DragKind = "hand" | "attack" | "block";
+  type DragKind = "hand" | "attack" | "block" | "arrange";
   const [drag, setDrag] = useState<{ kind: DragKind; id: number } | null>(null);
   const press = useRef<{ kind: DragKind; id: number; x: number; y: number } | null>(null);
   const swallowClick = useRef(false);
 
   const dragKindFor = (id: number): DragKind | null => {
-    if (!view.your_decision) return null;
-    if (kind === "DeclareAttackers" && view.hints.attackers.includes(id)) return "attack";
-    if (kind === "DeclareBlockers" && view.hints.blockers.includes(id)) return "block";
-    if (mode.kind === "idle" && view.hand.some((c) => c.id === id) && (view.hints.playable_lands.includes(id) || view.hints.castable.includes(id))) return "hand";
+    if (view.your_decision) {
+      if (kind === "DeclareAttackers" && view.hints.attackers.includes(id)) return "attack";
+      if (kind === "DeclareBlockers" && view.hints.blockers.includes(id)) return "block";
+    }
+    // Any card in hand can be dragged: to play it, or to a new spot in your hand.
+    if (mode.kind === "idle" && view.hand.some((c) => c.id === id)) return "hand";
+    // Your own permanents can always be moved around your side of the table.
+    if (mode.kind === "idle" && view.battlefield.some((c) => c.id === id && c.controller === view.you)) return "arrange";
     return null;
   };
+  // Drop a permanent somewhere on your side: into the row under the pointer, before the card
+  // under it (or at the end).
+  const arrangeDrop = (id: number, el: Element | null) => {
+    const rowEl = el?.closest(".board-me .row");
+    const board = el?.closest(".board-me");
+    if (!rowEl && !board) return;
+    const toBack = rowEl ? rowEl.classList.contains("row-back") : false;
+    const cur = rowsFor(view.you);
+    const front = cur.front.map((c) => c.id).filter((x) => x !== id);
+    const back = [...cur.lands, ...cur.support].map((c) => c.id).filter((x) => x !== id);
+    const list = toBack ? back : front;
+    const over = objAt(el);
+    let at = list.length;
+    if (over && list.includes(over.id)) {
+      const r = over.el.getBoundingClientRect();
+      at = list.indexOf(over.id) + (pointerX.current > r.left + r.width / 2 ? 1 : 0);
+    }
+    list.splice(at, 0, id);
+    setArranged({ front, back });
+  };
+  const pointerX = useRef(0);
   const objAt = (el: Element | null) => {
     const hit = el?.closest("[data-obj]");
     return hit ? { el: hit, id: Number(hit.getAttribute("data-obj")) } : null;
@@ -476,6 +588,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       const p = playerAt(el);
       return p && p.id !== view.you && !view.players[p.id]?.lost ? { el: anchorEl({ player: p.id }) ?? p.el, target: { Player: p.id } } : null;
     }
+    if (k === "arrange") return null;
     if (k === "block") {
       const o = objAt(el);
       const att = o && view.battlefield.find((c) => c.id === o.id && c.attacking === view.you);
@@ -498,6 +611,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   };
   useEffect(() => {
     const move = (e: PointerEvent) => {
+      pointerX.current = e.clientX;
       const p = press.current;
       if (!p || drag) return;
       if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) {
@@ -514,7 +628,9 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       setTimeout(() => (swallowClick.current = false), 0);
       const el = elementAtPointer();
       const hit = dropTarget(drag.kind, drag.id, el);
-      if (drag.kind === "attack") {
+      if (drag.kind === "arrange") {
+        arrangeDrop(drag.id, el);
+      } else if (drag.kind === "attack") {
         if (hit && "Player" in hit.target) setAttacks(new Map(attacks).set(drag.id, hit.target.Player));
       } else if (drag.kind === "block") {
         if (hit && "Object" in hit.target) {
@@ -522,10 +638,26 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
           setPickedBlocker(null);
         }
       } else {
-        // Dropped back on the hand: never mind.
-        if (!hit && el?.closest(".dock")) return;
+        // Dropped back on the hand: move it there.
+        if (!hit && el?.closest(".dock")) {
+          const others = hand.filter((h) => h.id !== drag.id);
+          const els = others.map((h) => document.querySelector(`.dock .hand [data-obj="${h.id}"]`));
+          let at = others.length;
+          for (let i = 0; i < others.length; i++) {
+            const r = els[i]?.getBoundingClientRect();
+            if (r && pointerX.current < r.left + r.width / 2) {
+              at = i;
+              break;
+            }
+          }
+          const ids = others.map((h) => h.id);
+          ids.splice(at, 0, drag.id);
+          setHandOrder(ids);
+          return;
+        }
         const c = view.hand.find((h) => h.id === drag.id);
         if (!c) return;
+        if (!view.your_decision || !(view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id))) return;
         if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
         else beginCast(c, hit?.target);
       }
@@ -550,7 +682,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (!targetsReady) arrows.push({ key: "tc", from: { obj: mode.source }, to: "cursor", tone: "drag" });
   }
   if (pickedBlocker !== null && !drag) arrows.push({ key: "pb", from: { obj: pickedBlocker }, to: "cursor", tone: "drag" });
-  if (drag) arrows.push({ key: "drag", from: { obj: drag.id }, to: "cursor", tone: "drag" });
+  if (drag && drag.kind !== "arrange") arrows.push({ key: "drag", from: { obj: drag.id }, to: "cursor", tone: "drag" });
   const snap = (el: Element | null): Element | null => {
     if (drag) return dropTarget(drag.kind, drag.id, el)?.el ?? null;
     if (pickedBlocker !== null) return dropTarget("block", pickedBlocker, el)?.el ?? null;
@@ -562,17 +694,29 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     }
     return null;
   };
-  const dragCard = drag?.kind === "hand" ? view.hand.find((c) => c.id === drag.id) : undefined;
+  const dragCard = drag?.kind === "hand" ? view.hand.find((c) => c.id === drag.id)
+    : drag?.kind === "arrange" ? view.battlefield.find((c) => c.id === drag.id) : undefined;
 
   // ---------------------------------------------------------------- layout helpers
   const rowsFor = (pid: number) => {
     const mine = view.battlefield.filter((c) => c.controller === pid);
+    if (pid === view.you && (arranged.front.length || arranged.back.length)) {
+      // Cards you've placed keep their spot; new ones join their usual row at the end.
+      const byId = new Map(mine.map((c) => [c.id, c]));
+      const placed = new Set([...arranged.front, ...arranged.back]);
+      const pick = (ids: number[]) => ids.map((i) => byId.get(i)).filter((c): c is CardView => !!c);
+      const fresh = mine.filter((c) => !placed.has(c.id));
+      const freshFront = fresh.filter((c) => c.types.includes("Creature"));
+      const freshBack = fresh.filter((c) => !c.types.includes("Creature"));
+      return { lands: [] as CardView[], front: [...pick(arranged.front), ...freshFront], support: [...pick(arranged.back), ...freshBack] };
+    }
     const lands = mine.filter((c) => c.types.includes("Land") && !c.types.includes("Creature"));
     const creatures = mine.filter((c) => c.types.includes("Creature"));
     const other = mine.filter((c) => !lands.includes(c) && !creatures.includes(c));
     return { lands, front: creatures, support: other };
   };
   const tagFor = (c: CardView) => {
+    if (view.hints.undo_mana.includes(c.id) && mode.kind === "idle") return "↺ click to untap";
     if (attacks.has(c.id)) return `→ ${view.players[attacks.get(c.id)!].name}`;
     if (blocks.has(c.id)) return `blocks ${view.battlefield.find((b) => b.id === blocks.get(c.id))?.name ?? ""}`;
     if (c.attacking !== null && c.controller !== view.you) return `→ ${view.players[c.attacking].name}`;
@@ -586,6 +730,12 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     </div>
   );
 
+  const hand = (() => {
+    const byId = new Map(view.hand.map((c) => [c.id, c]));
+    const kept = handOrder.map((id) => byId.get(id)).filter((c): c is CardView => !!c);
+    const known = new Set(handOrder);
+    return [...kept, ...view.hand.filter((c) => !known.has(c.id))];
+  })();
   const opp = rowsFor(focused.id);
   const mine = rowsFor(view.you);
   const myCommand = me.command;
@@ -613,6 +763,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     }
     if (kind === "DeclareAttackers") return "Drag a creature onto the player to attack, or click it to attack " + focused.name + ".";
     if (kind === "DeclareBlockers") return pickedBlocker !== null ? "Now pick the attacker to block." : "Drag a blocker onto the attacker it blocks.";
+    if (kind === "AssignCombatDamage") return "Divide your attacker's damage among its blockers.";
     if (kind === "Priority" && view.stack.length > 0) return "You can respond, or let the top of the stack resolve.";
     return view.active === view.you ? "Your turn" : `${view.players[view.active].name}'s turn`;
   })();
@@ -641,6 +792,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   return (
     <div className={`table ${view.active === view.you ? "my-turn" : "their-turn"} ${drag ? `dragging drag-${drag.kind}` : ""}`}
       onPointerDown={onPointerDown}
+      onPointerMove={(e) => (pointerX.current = e.clientX)}
       onClickCapture={(e) => {
         if (swallowClick.current) {
           e.stopPropagation();
@@ -655,7 +807,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
             onClick={() => (pickable({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
             <Sigil seat={p} size={28} />
             <span className="seat-name">{p.name}</span>
-            <span className="seat-life">{p.life}</span>
+            <LifePill life={p.life} />
             <span className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : `${p.hand_count} in hand · ${p.library_count} in library`}</span>
             {me.commander_damage[p.command[0]?.name ?? ""] !== undefined && (
               <span className="seat-cmd" title="Commander damage you've taken from them">⚔ {me.commander_damage[p.command[0]?.name ?? ""]}</span>
@@ -689,12 +841,16 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
                 onClick={() => (pickable({ Player: p.id }) ? chooseTarget({ Player: p.id }) : setFocus(p.id))}>
                 <div className="opp-panel-head">
                   <Sigil seat={p} size={30} />
-                  <div>
-                    <div className="seat-name">{p.name}{p.id === focused.id && kind === "DeclareAttackers" && view.your_decision ? " · attack target" : ""}</div>
+                  <div className="opp-id">
+                    <div className="opp-name-row">
+                      <span className="seat-name">{p.name}</span>
+                      <LifePill life={p.life} big />
+                      {p.is_active && <span className="turn-chip">Their turn</span>}
+                      {p.id === focused.id && kind === "DeclareAttackers" && view.your_decision && <span className="muted small">attack target</span>}
+                    </div>
                     <div className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <><span className="bump" key={p.hand_count}>{p.hand_count}</span> in hand · {p.library_count} library · {p.graveyard.length} graveyard</>}</div>
                   </div>
-                  <div className="opp-cmd">{p.command.map((c) => <Card key={c.id} card={c} size="mini" onHover={setHover} onInspect={setInspect} />)}</div>
-                  <span className="seat-life">{p.life}</span>
+                  <CommandZone cards={p.command} onHover={setHover} onInspect={setInspect} />
                 </div>
                 {renderRow([...r.lands, ...r.support], "row-back")}
                 {renderRow(r.front, "row-front")}
@@ -703,12 +859,17 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
           })}
         </section>
       ) : (
-      <section className="board board-opp theme-surface" data-theme={themeForSeat(focused.id)}>
+      <section className={`board board-opp theme-surface ${focused.is_active ? "is-active" : ""}`} data-theme={themeForSeat(focused.id)}>
+        <div className="focus-id">
+          <span className="seat-name">{focused.name}</span>
+          <LifePill life={focused.life} big />
+          {focused.is_active && <span className="turn-chip">Their turn</span>}
+        </div>
         <Medallion seat={focused} position="top" targetable={pickable({ Player: focused.id })} onClick={() => pickable({ Player: focused.id }) && chooseTarget({ Player: focused.id })} />
         <div className="opp-side">
           <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{focused.library_count}</div>
           <div className="pile pile-gy" title="Graveyard">{focused.graveyard.length}</div>
-          {focused.command.map((c) => <Card key={c.id} card={c} size="mini" onHover={setHover} onInspect={setInspect} />)}
+          <CommandZone cards={focused.command} onHover={setHover} onInspect={setInspect} />
         </div>
         {renderRow([...opp.lands, ...opp.support], "row-back")}
         {renderRow(opp.front, "row-front")}
@@ -728,7 +889,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       </div>
 
       {/* My board */}
-      <section className="board board-me theme-surface" data-theme={settings.theme}>
+      <section className="board board-me theme-surface" data-theme={settings.theme} title={drag?.kind === "arrange" ? "Drop into either row" : undefined}>
         {renderRow(mine.front, "row-front")}
         {renderRow([...mine.lands, ...mine.support], "row-back")}
       </section>
@@ -736,23 +897,18 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       {/* Bottom: command zone, hand, medallion, piles, action */}
       <footer className="dock">
         <div className="dock-left">
-          {myCommand.map((c) => (
-            <div key={c.id} className="command-slot">
-              <Card card={c} size="mini" glow={view.hints.castable.includes(c.id) ? "play" : null} onClick={() => view.hints.castable.includes(c.id) && beginCast(c)} onHover={setHover} onInspect={setInspect} />
-              <span className="slot-label">Command</span>
-            </div>
-          ))}
+          <CommandZone cards={myCommand} mine castable={view.hints.castable} onCast={(c) => beginCast(c)} onHover={setHover} onInspect={setInspect} />
         </div>
         <div className="hand">
-          {view.hand.map((c, i) => {
-            const n = view.hand.length;
+          {hand.map((c, i) => {
+            const n = hand.length;
             const offset = i - (n - 1) / 2;
             const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
             return (
               <Card key={c.id} card={c} size="hand" glow={playable && mode.kind === "idle" ? "play" : mode.kind === "target" && mode.source === c.id ? "selected" : null}
                 dim={mode.kind === "target" && mode.source !== c.id}
                 onClick={() => clickHand(c)} onHover={drag ? undefined : setHover} onInspect={setInspect}
-                className={[drawn.has(c.id) ? "drawn" : "", drag?.id === c.id ? "lifted" : ""].join(" ")}
+                className={[drawn.has(c.id) ? "drawn" : "", drag?.id === c.id ? "lifted" : "", isInstantSpeed(c) && quiet.has(c.name) ? "is-quiet" : ""].join(" ")}
                 style={{ transform: `translateX(${offset * -18}px) rotate(${offset * 2.2}deg) translateY(${Math.abs(offset) * 4}px)`, zIndex: i }} />
             );
           })}
@@ -860,10 +1016,31 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         );
       })()}
       <ArrowLayer arrows={arrows} snap={snap} ghost={dragCard && <Card card={dragCard} size="field" />} />
-      {inspect && <RulesPopup card={inspect} onClose={() => setInspect(null)} />}
+      {inspect && (
+        <RulesPopup card={inspect} onClose={() => setInspect(null)}
+          extra={isInstantSpeed(inspect) && inspect.controller === view.you ? (
+            <label className="quiet-toggle">
+              <input type="checkbox" checked={!quiet.has(inspect.name)} onChange={() => toggleQuiet(inspect.name)} />
+              <span>
+                <strong>Pause the game for {inspect.name}</strong>
+                <span className="muted small">When off, holding this card won't stop the game at every step to let you respond. You can still cast it whenever the game stops.</span>
+              </span>
+            </label>
+          ) : null} />
+      )}
+      {popItem && popItem.card && (
+        <div className="cast-pop" key={popItem.id} onClick={() => setCastPop({ id: popItem.id, closed: true })} title="Click to dismiss">
+          <div className="cast-pop-head">
+            <span className="cast-pop-who">{view.players[popItem.controller].name}</span> {popItem.controller === view.you ? "cast" : "casts"}
+            {popItem.targets.length > 0 && <span className="muted"> targeting {popItem.targets.join(", ")}</span>}
+          </div>
+          <CardPreview card={popItem.card} />
+          <div className="cast-pop-foot muted small">You can respond before it resolves.</div>
+        </div>
+      )}
 
       {/* Hover preview */}
-      {hover && !drag && <div className="preview-wrap"><CardPreview card={hover} /></div>}
+      {hover && !drag && <div className={`preview-wrap ${pointerX.current < window.innerWidth * 0.4 ? "right" : ""}`}><CardPreview card={hover} /></div>}
 
       {/* Ability menu */}
       {mode.kind === "abilities" && (
@@ -889,6 +1066,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
 
       {kind === "Mulligan" && view.your_decision && <MulliganModal view={view} act={act} onHover={setHover} />}
       {(trigs.length > 1 || (trigs.length === 1 && startedTrigger.current === triggerKey)) && mode.kind === "idle" && <TriggerModal view={view} onDone={startTriggers} />}
+      {kind === "AssignCombatDamage" && view.your_decision && <DamageModal key={JSON.stringify(view.decision)} view={view} act={act} onHover={setHover} />}
       {kind === "Discard" && view.your_decision && <DiscardModal view={view} act={act} onHover={setHover} />}
       {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} />}
 

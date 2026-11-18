@@ -73,7 +73,6 @@ export function App() {
         <div className="brand">
           <div className="brand-mark" />
           <h1>Commander Table</h1>
-          <p className="muted">Play Commander with your friends and your own decks.</p>
         </div>
 
         {update.kind === "available" && (

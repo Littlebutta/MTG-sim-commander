@@ -226,7 +226,7 @@ export function CardPreview({ card }: { card: CardView }) {
 }
 
 /** Right-click popup: the card's text plus what each keyword and term on it means. */
-export function RulesPopup({ card, onClose }: { card: CardView; onClose: () => void }) {
+export function RulesPopup({ card, onClose, extra }: { card: CardView; onClose: () => void; extra?: React.ReactNode }) {
   const terms = explain(card.keywords, card.text);
   if (card.is_commander) terms.push(["Commander tax", "Each time you cast your commander from the command zone, it costs {2} more for each previous time."]);
   if (card.summoning_sick && card.types.includes("Creature") && card.zone === "Battlefield")
@@ -253,6 +253,7 @@ export function RulesPopup({ card, onClose }: { card: CardView; onClose: () => v
             </dl>
           )}
           {card.unsupported && <p className="warn small">Parts of this card aren't automated yet; those parts do nothing.</p>}
+          {extra}
           <button className="btn rules-close" onClick={onClose}>Close</button>
         </div>
       </div>

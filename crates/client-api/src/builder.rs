@@ -741,13 +741,19 @@ mod tests {
             thin.push_str(&format!("{n} {c}\n"));
         }
         thin.push_str("Deck\n");
-        for (n, c) in list.cards.iter().take(10) {
+        let spells: Vec<&(u32, String)> = list
+            .cards
+            .iter()
+            .filter(|(_, c)| !matches!(c.as_str(), "Forest" | "Plains" | "Island"))
+            .take(10)
+            .collect();
+        for (n, c) in &spells {
             thin.push_str(&format!("{n} {c}\n"));
         }
         let rec = recommend(&thin, &pool, &index);
         assert!(!rec.picks.is_empty());
         assert!(rec.advice.iter().any(|a| a.role == Some(Role::Land)));
-        let in_deck: HashSet<String> = list.cards.iter().take(10).map(|(_, c)| c.clone()).collect();
+        let in_deck: HashSet<String> = spells.iter().map(|(_, c)| c.clone()).collect();
         let id = parse_identity(&rec.identity);
         for p in &rec.picks {
             assert!(!in_deck.contains(&p.card.name));

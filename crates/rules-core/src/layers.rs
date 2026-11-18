@@ -699,6 +699,11 @@ pub fn matches_filter(
             return false;
         }
     }
+    if let Some(cs) = f.not_colors {
+        if cs.iter().any(|col| c.colors.contains(col)) {
+            return false;
+        }
+    }
     if let Some(k) = f.keyword {
         if !c.has_keyword(k) {
             return false;

@@ -71,6 +71,8 @@ pub struct SeatView {
     pub is_active: bool,
     pub has_priority: bool,
     pub lost: bool,
+    /// Mulligans taken this game.
+    pub mulligans: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -105,6 +107,8 @@ pub struct Hints {
     pub triggers: Vec<TriggerChoiceView>,
     pub discard_count: usize,
     pub mulligan_bottom: u32,
+    /// Tapped permanents whose unspent mana you can take back (`Action::UndoMana`).
+    pub undo_mana: Vec<u32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -325,6 +329,7 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
                 is_you: p.id == viewer,
                 is_active: p.id == g.active,
                 has_priority: priority == Some(p.id),
+                mulligans: p.mulligans,
                 lost: p.has_lost || p.has_left,
             }
         })
@@ -428,6 +433,11 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
         vec![]
     };
     let hints = Hints {
+        undo_mana: if matches!(decision, Decision::Priority { player } if player == viewer) {
+            g.undoable_mana(viewer).iter().map(|i| i.0).collect()
+        } else {
+            vec![]
+        },
         playable_lands: g.playable_lands(viewer).iter().map(|i| i.0).collect(),
         castable: castable.iter().map(|i| i.0).collect(),
         activatable: activatable.iter().map(|(o, i)| (o.0, *i)).collect(),

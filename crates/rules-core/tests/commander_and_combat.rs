@@ -278,3 +278,121 @@ fn conceding_player_leaves_and_their_cards_go_with_them() {
     pass_until(&mut g, Step::Main1);
     assert_eq!(g.active, P1);
 }
+
+#[test]
+fn attacker_divides_damage_among_several_blockers() {
+    let mut g = game(2);
+    let giant = put(&mut g, P0, vanilla("Giant", 5, 5));
+    let a = put(&mut g, P1, bears());
+    let b = put(&mut g, P1, vanilla("Wall", 0, 4));
+    attack(&mut g, vec![(giant, P1)]);
+    pass_until_decision(&mut g, |d| matches!(d, Decision::DeclareBlockers { .. }));
+    g.submit(P1, Action::Block(vec![(a, giant), (b, giant)]))
+        .unwrap();
+    pass_until_decision(&mut g, |d| matches!(d, Decision::AssignCombatDamage { .. }));
+    let Decision::AssignCombatDamage {
+        player,
+        power,
+        trample,
+        blockers,
+        ..
+    } = g.decision().clone()
+    else {
+        unreachable!()
+    };
+    assert_eq!((player, power, trample), (P0, 5, false));
+    assert_eq!(blockers, vec![(a, 2), (b, 4)]);
+    // Can't send damage to the player without trample, and must assign all of it.
+    assert!(g
+        .submit(
+            P0,
+            Action::AssignDamage(vec![(Target::Object(a), 2), (Target::Player(P1), 3)])
+        )
+        .is_err());
+    assert!(g
+        .submit(P0, Action::AssignDamage(vec![(Target::Object(a), 2)]))
+        .is_err());
+    // Any division is fine: here everything goes to the wall.
+    g.submit(P0, Action::AssignDamage(vec![(Target::Object(b), 5)]))
+        .unwrap();
+    pass_until(&mut g, Step::EndCombat);
+    assert!(g.is_on_battlefield(a));
+    assert!(!g.is_on_battlefield(b));
+}
+
+#[test]
+fn deathtouch_trample_needs_only_one_per_blocker() {
+    let mut g = game(2);
+    let mut def = (*with_keyword("Wurm", 6, 6, Keyword::Trample)).clone();
+    def.abilities.push(Ability::Keyword(Keyword::Deathtouch));
+    let wurm = put(&mut g, P0, std::sync::Arc::new(def));
+    let a = put(&mut g, P1, vanilla("Wall", 0, 5));
+    let b = put(&mut g, P1, vanilla("Wall", 0, 5));
+    attack(&mut g, vec![(wurm, P1)]);
+    pass_until_decision(&mut g, |d| matches!(d, Decision::DeclareBlockers { .. }));
+    g.submit(P1, Action::Block(vec![(a, wurm), (b, wurm)]))
+        .unwrap();
+    pass_until_decision(&mut g, |d| matches!(d, Decision::AssignCombatDamage { .. }));
+    let Decision::AssignCombatDamage {
+        blockers,
+        suggested,
+        ..
+    } = g.decision().clone()
+    else {
+        unreachable!()
+    };
+    assert_eq!(blockers, vec![(a, 1), (b, 1)]);
+    assert_eq!(
+        suggested,
+        vec![
+            (Target::Object(a), 1),
+            (Target::Object(b), 1),
+            (Target::Player(P1), 4)
+        ]
+    );
+    // Lethal to only one blocker isn't enough to trample over.
+    assert!(g
+        .submit(
+            P0,
+            Action::AssignDamage(vec![(Target::Object(a), 1), (Target::Player(P1), 5)])
+        )
+        .is_err());
+    g.submit(P0, Action::AssignDamage(suggested)).unwrap();
+    pass_until(&mut g, Step::EndCombat);
+    assert!(!g.is_on_battlefield(a) && !g.is_on_battlefield(b));
+    assert_eq!(g.player(P1).life, 36);
+}
+
+#[test]
+fn unspent_mana_can_be_taken_back() {
+    let mut g = game(2);
+    let forest = put(&mut g, P0, forest());
+    pass_until(&mut g, Step::Main1);
+    let ability = 0;
+    g.submit(
+        P0,
+        Action::ActivateMana {
+            object: forest,
+            ability,
+            color: None,
+        },
+    )
+    .unwrap();
+    assert!(g.object(forest).unwrap().tapped);
+    assert_eq!(g.undoable_mana(P0), vec![forest]);
+    g.submit(P0, Action::UndoMana(forest)).unwrap();
+    assert!(!g.object(forest).unwrap().tapped);
+    assert_eq!(g.player(P0).mana_pool.total(), 0);
+    // Once you do something else, the mana is committed.
+    g.submit(
+        P0,
+        Action::ActivateMana {
+            object: forest,
+            ability,
+            color: None,
+        },
+    )
+    .unwrap();
+    g.submit(P0, Action::Pass).unwrap();
+    assert!(g.undoable_mana(P0).is_empty());
+}
