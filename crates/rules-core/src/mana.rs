@@ -281,6 +281,11 @@ impl ManaPool {
     pub fn add(&mut self, t: ManaType, n: u32) {
         self.amounts[idx(t)] += n;
     }
+    /// Take mana out of the pool (no more than is there).
+    pub fn remove(&mut self, t: ManaType, n: u32) {
+        let a = &mut self.amounts[idx(t)];
+        *a = a.saturating_sub(n);
+    }
     pub fn get(&self, t: ManaType) -> u32 {
         self.amounts[idx(t)]
     }

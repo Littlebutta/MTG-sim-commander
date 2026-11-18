@@ -41,6 +41,7 @@ export type Action =
   | { Attack: [number, number][] }
   | { Block: [number, number][] }
   | { AssignDamage: [Target, number][] }
+  | { UndoMana: number }
   | { Discard: number[] }
   | { SetCommanderReturn: boolean };
 
@@ -89,6 +90,7 @@ export interface CardView {
 export interface SeatView {
   id: number;
   name: string;
+  mulligans?: number;
   life: number;
   poison: number;
   hand_count: number;
@@ -133,6 +135,8 @@ export interface Hints {
   triggers: TriggerChoiceView[];
   discard_count: number;
   mulligan_bottom: number;
+  /** Tapped permanents whose unspent mana can be taken back. */
+  undo_mana: number[];
 }
 
 export interface PlayerView {

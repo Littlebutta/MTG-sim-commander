@@ -81,6 +81,8 @@ pub struct Game {
     pub(crate) decision: crate::engine::Decision,
     pub(crate) passes: usize,
     pub(crate) pending_blockers: VecDeque<PlayerId>,
+    /// Mana abilities that can still be taken back: (player, permanent, mana made).
+    pub(crate) mana_undo: Vec<(PlayerId, ObjectId, Vec<crate::mana::ManaType>)>,
     pub(crate) resume_after_triggers: Option<Stage>,
     /// Last-known information for permanents that just left together (603.10a).
     pub(crate) lookback: Vec<(ObjectId, crate::layers::Characteristics)>,
@@ -120,6 +122,7 @@ impl Clone for Game {
             decision: self.decision.clone(),
             passes: self.passes,
             pending_blockers: self.pending_blockers.clone(),
+            mana_undo: self.mana_undo.clone(),
             resume_after_triggers: self.resume_after_triggers.clone(),
             lookback: self.lookback.clone(),
             rng: self.rng.clone(),
@@ -156,6 +159,7 @@ impl Game {
             decision: crate::engine::Decision::GameOver { winner: None },
             passes: 0,
             pending_blockers: VecDeque::new(),
+            mana_undo: Vec::new(),
             resume_after_triggers: None,
             lookback: Vec::new(),
             rng: ChaCha8Rng::seed_from_u64(config.seed),

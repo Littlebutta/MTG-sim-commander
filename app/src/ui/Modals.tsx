@@ -5,22 +5,69 @@ import { Card } from "./Card";
 type Act = (a: Action) => void;
 type Hover = (c: CardView | null) => void;
 
+type Group = "Lands" | "Ramp" | "Spells";
+const isLand = (c: CardView) => c.types.includes("Land");
+/** Mana creatures, mana rocks and land-fetching spells. */
+export const isRamp = (c: CardView) =>
+  !isLand(c) && (/\badd (\{|one mana|two mana|three mana|mana)/i.test(c.text) || /search your library for (a|up to \w+) basic land/i.test(c.text) || /search your library for a land/i.test(c.text));
+const groupOf = (c: CardView): Group => (isLand(c) ? "Lands" : isRamp(c) ? "Ramp" : "Spells");
+
+/** A plain-English read on an opening hand, for new players. */
+export function handAdvice(hand: CardView[], identity: string[], mulligans: number): { verdict: "keep" | "mull" | "maybe"; text: string } {
+  const lands = hand.filter(isLand);
+  const ramp = hand.filter(isRamp).length;
+  const cheap = hand.filter((c) => !isLand(c) && c.mana_value <= 3).length;
+  const n = lands.length;
+  const colorsIn = new Set(lands.flatMap((c) => {
+    const basic = ["Plains", "Island", "Swamp", "Mountain", "Forest"].findIndex((t) => c.subtypes.includes(t));
+    if (basic >= 0) return ["WUBRG"[basic]];
+    return (c.text.match(/\{([WUBRG])\}/g) ?? []).map((m) => m[1]);
+  }));
+  const missing = identity.filter((x) => !colorsIn.has(x));
+  const after = mulligans > 0 ? " Each further mulligan costs you a card, so lean toward keeping." : " Your first mulligan is free in a multiplayer game.";
+  if (n <= 1) return { verdict: "mull", text: `Only ${n === 0 ? "no lands" : "1 land"}. You'd likely miss land drops for turns. Mulligan.${mulligans > 1 ? " (With so few cards left, keeping can be right if you have cheap plays.)" : ""}` };
+  if (n >= 6) return { verdict: "mull", text: `${n} lands and almost nothing to cast. This hand floods. Mulligan.` };
+  if (n === 2 && ramp === 0 && cheap < 2) return { verdict: "mull", text: `2 lands, no ramp and little to do early. Risky: you need to draw lands fast.${after}` };
+  if (n === 2) return { verdict: "maybe", text: `2 lands${ramp ? ` plus ${ramp} ramp` : ""} and ${cheap} cheap play${cheap === 1 ? "" : "s"}. Keepable, but you need to hit your next land drop.` };
+  if (missing.length > 1 && identity.length > 1) return { verdict: "maybe", text: `${n} lands, but none make ${missing.join(" or ")}. Fine if your early cards don't need those colors.` };
+  if (n === 5 && cheap === 0) return { verdict: "maybe", text: `5 lands and only expensive spells. Keepable, but slow.` };
+  return { verdict: "keep", text: `${n} lands${ramp ? `, ${ramp} ramp` : ""} and ${cheap} cheap play${cheap === 1 ? "" : "s"}. A solid start. Keep.` };
+}
+
 export function MulliganModal({ view, act, onHover }: { view: PlayerView; act: Act; onHover: Hover }) {
   const need = view.hints.mulligan_bottom;
   const [bottom, setBottom] = useState<number[]>([]);
   const toggle = (id: number) =>
     setBottom((b) => (b.includes(id) ? b.filter((x) => x !== id) : b.length < need ? [...b, id] : b));
+  const me = view.players[view.you];
+  const advice = handAdvice(view.hand, me.color_identity, me.mulligans ?? 0);
+  const groups: Group[] = ["Lands", "Ramp", "Spells"];
   return (
     <div className="scrim">
-      <div className="modal wide">
+      <div className="modal wide mull-modal">
         <h2>Opening hand</h2>
         <p className="muted">
-          {need > 0 ? `Keep, then choose ${need} card${need > 1 ? "s" : ""} to put on the bottom.` : "Your first mulligan in a multiplayer game is free."}
+          {need > 0 ? `Keep, then choose ${need} card${need > 1 ? "s" : ""} to put on the bottom.` : "Hover a card to read it. Your first mulligan in a multiplayer game is free."}
         </p>
-        <div className="modal-cards">
-          {view.hand.map((c) => (
-            <Card key={c.id} card={c} size="hand" glow={bottom.includes(c.id) ? "selected" : null} onClick={need ? () => toggle(c.id) : undefined} onHover={onHover} />
-          ))}
+        <div className="mull-groups">
+          {groups.map((g) => {
+            const cards = view.hand.filter((c) => groupOf(c) === g);
+            if (cards.length === 0) return null;
+            return (
+              <div key={g} className={`mull-group mull-${g.toLowerCase()}`}>
+                <div className="mull-group-label">{g} <span>{cards.length}</span></div>
+                <div className="modal-cards">
+                  {cards.map((c) => (
+                    <Card key={c.id} card={c} size="hand" glow={bottom.includes(c.id) ? "selected" : null} onClick={need ? () => toggle(c.id) : undefined} onHover={onHover} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className={`mull-advice ${advice.verdict}`}>
+          <span className="mull-advice-tag">{advice.verdict === "keep" ? "Suggestion: keep" : advice.verdict === "mull" ? "Suggestion: mulligan" : "Your call"}</span>
+          <span>{advice.text}</span>
         </div>
         <div className="modal-actions">
           <button className="btn" onClick={() => act("Mulligan")}>Mulligan</button>
@@ -30,7 +77,6 @@ export function MulliganModal({ view, act, onHover }: { view: PlayerView; act: A
     </div>
   );
 }
-
 
 /** Order several triggers at once. Their targets are chosen on the table afterwards. */
 export function TriggerModal({ view, onDone }: { view: PlayerView; onDone: (order: number[]) => void }) {

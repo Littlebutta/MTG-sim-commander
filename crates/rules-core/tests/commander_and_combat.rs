@@ -362,3 +362,21 @@ fn deathtouch_trample_needs_only_one_per_blocker() {
     assert!(!g.is_on_battlefield(a) && !g.is_on_battlefield(b));
     assert_eq!(g.player(P1).life, 36);
 }
+
+#[test]
+fn unspent_mana_can_be_taken_back() {
+    let mut g = game(2);
+    let forest = put(&mut g, P0, forest());
+    pass_until(&mut g, Step::Main1);
+    let ability = 0;
+    g.submit(P0, Action::ActivateMana { object: forest, ability, color: None }).unwrap();
+    assert!(g.object(forest).unwrap().tapped);
+    assert_eq!(g.undoable_mana(P0), vec![forest]);
+    g.submit(P0, Action::UndoMana(forest)).unwrap();
+    assert!(!g.object(forest).unwrap().tapped);
+    assert_eq!(g.player(P0).mana_pool.total(), 0);
+    // Once you do something else, the mana is committed.
+    g.submit(P0, Action::ActivateMana { object: forest, ability, color: None }).unwrap();
+    g.submit(P0, Action::Pass).unwrap();
+    assert!(g.undoable_mana(P0).is_empty());
+}

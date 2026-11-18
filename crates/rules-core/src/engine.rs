@@ -106,6 +106,10 @@ pub enum Action {
     OrderTriggers(Vec<(usize, Vec<Target>)>),
     Attack(Vec<(ObjectId, PlayerId)>),
     Block(Vec<(ObjectId, ObjectId)>),
+    /// Take back a mana ability whose mana hasn't been spent: untap the permanent and remove
+    /// its mana from the pool. Only for plain "{T}: Add ..." abilities, until you take another
+    /// action or pass (a client convenience, like rewinding an accidental tap).
+    UndoMana(ObjectId),
     /// Answer to `Decision::AssignCombatDamage`: how much damage goes where.
     AssignDamage(Vec<(Target, i32)>),
     Discard(Vec<ObjectId>),
@@ -228,8 +232,14 @@ impl Game {
                     color,
                 },
             ) => {
+                // Like after_action, but tapping for mana keeps earlier mana undoable.
                 self.activate_mana(player, object, ability, color)?;
-                self.after_action(player);
+                self.passes = 0;
+                self.stage = Stage::PriorityCheck(player);
+            }
+            (Decision::Priority { .. }, Action::UndoMana(object)) => {
+                self.undo_mana(player, object)?;
+                self.stage = Stage::PriorityCheck(player);
             }
             (Decision::PutTriggersOnStack { .. }, Action::OrderTriggers(order)) => {
                 self.order_triggers(player, order)?
@@ -260,6 +270,7 @@ impl Game {
     fn after_action(&mut self, player: PlayerId) {
         // 117.3c: the player who acted receives priority again.
         self.passes = 0;
+        self.mana_undo.clear();
         self.stage = Stage::PriorityCheck(player);
     }
 
@@ -543,6 +554,7 @@ impl Game {
         for p in self.players.iter_mut() {
             p.mana_pool.empty();
         }
+        self.mana_undo.clear();
         self.version += 1;
     }
 
@@ -575,6 +587,7 @@ impl Game {
     // ---------------------------------------------------------------- priority
 
     fn do_pass(&mut self, p: PlayerId) {
+        self.mana_undo.clear();
         self.passes += 1;
         let in_game = self.players_in_game().len();
         if self.passes >= in_game {
@@ -926,9 +939,52 @@ impl Game {
             ManaProduction::AnyColor => vec![ManaType::Color(color.unwrap_or(Color::White))],
         };
         self.pay_cost(p, object, &ch, &cost, 0)?;
-        for m in mana {
-            self.player_mut(p).mana_pool.add(m, 1);
+        for m in &mana {
+            self.player_mut(p).mana_pool.add(*m, 1);
         }
+        if cost == Cost::tap() {
+            self.mana_undo.push((p, object, mana));
+        }
+        Ok(())
+    }
+
+    /// Permanents whose mana `p` can still take back (see `Action::UndoMana`).
+    pub fn undoable_mana(&self, p: PlayerId) -> Vec<ObjectId> {
+        self.mana_undo
+            .iter()
+            .filter(|(who, obj, mana)| {
+                *who == p
+                    && self.is_on_battlefield(*obj)
+                    && self.objects[obj].tapped
+                    && self.pool_has(p, mana)
+            })
+            .map(|(_, obj, _)| *obj)
+            .collect()
+    }
+
+    fn pool_has(&self, p: PlayerId, mana: &[ManaType]) -> bool {
+        let pool = &self.player(p).mana_pool;
+        mana.iter()
+            .all(|m| pool.get(*m) as usize >= mana.iter().filter(|x| *x == m).count())
+    }
+
+    fn undo_mana(&mut self, p: PlayerId, object: ObjectId) -> Result<(), RulesError> {
+        if !self.undoable_mana(p).contains(&object) {
+            return illegal("that mana has already been used");
+        }
+        let i = self
+            .mana_undo
+            .iter()
+            .rposition(|(who, obj, _)| *who == p && *obj == object)
+            .unwrap();
+        let (_, _, mana) = self.mana_undo.remove(i);
+        for m in mana {
+            self.player_mut(p).mana_pool.remove(m, 1);
+        }
+        if let Some(o) = self.object_mut(object) {
+            o.tapped = false;
+        }
+        self.version += 1;
         Ok(())
     }
 
