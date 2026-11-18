@@ -958,7 +958,7 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 .b-group .menu-label { margin: 4px 8px; }
 .b-stats { display: flex; flex-direction: column; gap: 14px; padding-bottom: 6px; }
 .b-curve { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; height: 110px; align-items: end; }
-.b-bar { display: grid; grid-template-rows: 16px 1fr 16px; height: 100%; text-align: center; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.b-bar { position: relative; display: grid; grid-template-rows: 16px 1fr 16px; height: 100%; text-align: center; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .b-bar > span { display: block; }
 .b-bar-fill { align-self: end; justify-self: center; width: 70%; min-height: 2px; border-radius: 4px 4px 1px 1px; background: var(--turn); }
 .b-meters { display: flex; flex-direction: column; gap: 6px; }
@@ -1017,3 +1017,25 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 .mull-advice.keep .mull-advice-tag { background: rgba(89, 217, 142, 0.18); color: var(--good); }
 .mull-advice.mull .mull-advice-tag { background: rgba(255, 77, 94, 0.18); color: #ff8a95; }
 .mull-advice.maybe .mull-advice-tag { background: rgba(255, 179, 71, 0.18); color: var(--accent-2); }
+
+/* builder: curve targets, colors, card window, export */
+.b-curve-label { display: flex; justify-content: space-between; }
+.b-bar-target { position: absolute; left: 12%; right: 12%; height: 0; border-top: 2px dashed rgba(255, 255, 255, 0.35); pointer-events: none; }
+.b-colors { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; margin-top: 4px; }
+.b-color { display: inline-flex; align-items: center; gap: 5px; }
+.b-curve-tips li { font-size: 12.5px; }
+.b-window-scrim { position: fixed; z-index: 80; }
+.b-window {
+  display: grid; grid-template-columns: 300px minmax(300px, 420px); gap: 18px; padding: 18px; border-radius: 16px;
+  background: rgba(16, 10, 22, 0.98); border: 1px solid var(--line); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
+  max-height: 86vh; overflow: auto;
+}
+.b-window-art { border-radius: 12px; overflow: hidden; aspect-ratio: 5 / 7; position: relative; background: #0f0b14; }
+.b-window-art .art-proc, .b-window-art .art-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.b-window-art .art-glyph { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); opacity: 0.4; color: #fff; }
+.b-window-body { display: flex; flex-direction: column; gap: 8px; }
+.b-window-body .preview-text { font-size: 14px; line-height: 1.5; }
+.b-window-pt { font-weight: 700; font-size: 18px; }
+.b-window-roles { display: flex; gap: 6px; }
+.b-export { width: min(640px, 92vw); }
+.b-export-text { width: 100%; height: 340px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; resize: vertical; white-space: pre; }

@@ -3,7 +3,9 @@ import {
   builtinDecks, listDecks, lookupCards, newDeckId, recommendCards, saveDeck, searchCards,
   type CardSummary, type Recommendations, type Role, type SavedDeck,
 } from "../decks";
-import { ManaCost } from "./Card";
+import type { CardView } from "../engine/types";
+import { CardArt, ManaCost, RulesText } from "./Card";
+import { explain } from "./keywords";
 
 // Deck builder: search the card pool on the left, the deck in the middle, and on the right what
 // the deck is short of with cards that would help.
@@ -76,6 +78,117 @@ function CardTip({ card }: { card: CardSummary }) {
   );
 }
 
+/** Just enough of a card view to paint art for a card that isn't in a game. */
+function asView(c: CardSummary): CardView {
+  const [left, right = ""] = c.type_line.split(" — ");
+  const words = left.split(" ");
+  const colors = (c.mana_cost.match(/\{([WUBRG])\}/g) ?? []).map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i);
+  return {
+    id: 0, name: c.name, mana_cost: c.mana_cost, mana_value: c.mana_value, colors, type_line: c.type_line, text: c.oracle_text,
+    types: words.filter((w) => /^[A-Z]/.test(w) && !["Legendary", "Basic", "Snow"].includes(w)),
+    supertypes: words.filter((w) => ["Legendary", "Basic", "Snow"].includes(w)), subtypes: right.split(" ").filter(Boolean),
+    power: c.power, toughness: c.toughness, keywords: [], abilities: [],
+  } as unknown as CardView;
+}
+
+/** Right-click a card: read it in a window. */
+function CardWindow({ card, onClose, inDeck, onAdd, onRemove }: {
+  card: CardSummary; onClose: () => void; inDeck: boolean; onAdd: () => void; onRemove: () => void;
+}) {
+  const kws = card.oracle_text.split("\n").flatMap((l) => l.split(/,\s*/)).map((w) => w.trim()).filter((w) => /^[A-Z][a-z]+( [a-z]+)?$/.test(w));
+  const terms = explain(kws, card.oracle_text);
+  return (
+    <div className="scrim b-window-scrim" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }}>
+      <div className="b-window" onClick={(e) => e.stopPropagation()}>
+        <div className="b-window-art"><CardArt card={asView(card)} glyph={72} /></div>
+        <div className="b-window-body">
+          <div className="preview-head"><span className="preview-name">{card.name}</span><ManaCost cost={card.mana_cost} size="md" /></div>
+          <div className="preview-type">{card.type_line}</div>
+          <div className="preview-text">{card.oracle_text ? <RulesText text={card.oracle_text} /> : <p className="muted">No rules text.</p>}</div>
+          {card.power !== null && <div className="b-window-pt">{card.power}/{card.toughness}</div>}
+          {card.roles.length > 0 && <div className="b-window-roles">{card.roles.map((r) => <span key={r} className={`b-role role-${r}`}>{ROLE_SHORT[r]}</span>)}</div>}
+          {terms.length > 0 && (
+            <dl className="glossary">{terms.map(([k, v]) => <div key={k}><dt>{k}</dt><dd><RulesText text={v} /></dd></div>)}</dl>
+          )}
+          {!card.supported && <p className="warn small">Some of this card's text isn't supported in games yet; those parts do nothing.</p>}
+          <div className="modal-actions">
+            {inDeck ? <button className="btn" onClick={onRemove}>Remove from deck</button> : <button className="btn" onClick={onAdd}>Add to deck</button>}
+            <button className="btn btn-primary" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Rough share of a Commander deck's nonland cards at each mana value (0–1, 2, 3, 4, 5, 6, 7+). */
+const CURVE_TARGET = [0.08, 0.22, 0.22, 0.18, 0.13, 0.09, 0.08];
+
+/** What the mana curve and colors say about a deck, in plain words. */
+function curveAdvice(curve: number[], avg: number, pips: Record<string, number>, sources: Record<string, number>): string[] {
+  const out: string[] = [];
+  const buckets = [curve[0] + curve[1], curve[2], curve[3], curve[4], curve[5], curve[6], curve[7]];
+  const total = buckets.reduce((a, b) => a + b, 0);
+  if (total < 10) return ["Add more cards to see advice about your mana curve."];
+  const names = ["0–1", "2", "3", "4", "5", "6", "7+"];
+  const diffs = buckets.map((n, i) => n - CURVE_TARGET[i] * total);
+  // Too few cheap-to-mid spells, or too many expensive ones, are what hurt; the reverse is fine.
+  const low = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 1 && i <= 3 && d <= -3).sort((a, b) => a[0] - b[0]);
+  const high = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 4 && d >= 3).sort((a, b) => b[0] - a[0]);
+  if (avg >= 4) out.push(`Average mana value is ${avg.toFixed(2)}: a slow deck. Cheaper spells and more ramp will help you keep up.`);
+  else if (avg > 0 && avg <= 2.4) out.push(`Average mana value is ${avg.toFixed(2)}: a fast, low curve. You can run 1–2 fewer lands.`);
+  else out.push(`Average mana value is ${avg.toFixed(2)}, a comfortable middle for Commander.`);
+  const top = buckets[5] + buckets[6];
+  if (top > total * 0.25) out.push(`${top} cards cost 6 or more. That's top-heavy; trim a few or add ramp.`);
+  if (low.length) out.push(`Light at ${low.map(([d, i]) => `${names[i]} mana (about ${Math.round(-d)} short)`).join(", ")}.`);
+  if (high.length) out.push(`Heavy at ${high.map(([d, i]) => `${names[i]} mana (about ${Math.round(d)} extra)`).join(", ")}.`);
+  if (buckets[1] < 8) out.push("Two-mana plays are what let you do something on turn 2; most decks want 10 or more.");
+  const pipTotal = Object.values(pips).reduce((a, b) => a + b, 0);
+  const srcTotal = Object.values(sources).reduce((a, b) => a + b, 0);
+  if (pipTotal > 0 && srcTotal > 0) {
+    for (const [c, n] of Object.entries(pips)) {
+      const share = n / pipTotal;
+      const have = (sources[c] ?? 0) / srcTotal;
+      if (share - have > 0.12) out.push(`${Math.round(share * 100)}% of your colored mana symbols are ${COLOR_NAME[c]}, but only ${Math.round(have * 100)}% of your lands make it.`);
+    }
+  }
+  return out;
+}
+const COLOR_NAME: Record<string, string> = { W: "white", U: "blue", B: "black", R: "red", G: "green" };
+
+function ExportWindow({ name, text, onClose }: { name: string; text: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    a.download = `${name.replace(/[^\w\- ]+/g, "").trim() || "deck"}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  return (
+    <div className="scrim b-window-scrim" onClick={onClose}>
+      <div className="modal wide b-export" onClick={(e) => e.stopPropagation()}>
+        <h2>Export decklist</h2>
+        <p className="muted">Plain text that Moxfield, Archidekt and other deck sites can import.</p>
+        <textarea className="field b-export-text" readOnly value={text} onFocus={(e) => e.currentTarget.select()} />
+        <div className="modal-actions">
+          <button className="btn" onClick={download}>Download .txt</button>
+          <button className="btn" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BuilderScreen({ onBack }: { onBack: () => void }) {
   const [decks, setDecks] = useState<SavedDeck[]>([]);
   const [deck, setDeck] = useState<SavedDeck>(() => ({ id: newDeckId(), name: "New deck", text: "", updated: 0 }));
@@ -89,6 +202,8 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
   const [rec, setRec] = useState<Recommendations | null>(null);
   const [tip, setTip] = useState<CardSummary | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [opened, setOpened] = useState<CardSummary | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     Promise.all([listDecks(), builtinDecks()]).then(([m, b]) => setDecks([...m, ...b]));
@@ -210,9 +325,29 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
     ? [["Land", stats.lands, stats.avg_mv > 0 && stats.avg_mv < 2.6 ? 35 : 37], ["Ramp", stats.ramp, 10], ["Draw", stats.draw, 10], ["Removal", stats.removal, 8], ["Wipe", stats.wipes, 2], ["Creature", stats.creatures, 20]]
     : [];
   const inDeck = (n: string) => draft.commanders.includes(n) || draft.cards.has(n);
+  // Colored mana symbols in the deck's spells, and lands that can make each color.
+  const { pips, sources } = useMemo(() => {
+    const pips: Record<string, number> = {};
+    const sources: Record<string, number> = {};
+    for (const [n, q] of [...draft.cards.entries(), ...draft.commanders.map((c) => [c, 1] as [string, number])]) {
+      const c = info.get(n);
+      if (!c) continue;
+      if (c.type_line.includes("Land")) {
+        for (const col of c.color_identity.split("")) if (col) sources[col] = (sources[col] ?? 0) + q;
+      } else {
+        for (const m of c.mana_cost.match(/\{([WUBRG])\}/g) ?? []) pips[m[1]] = (pips[m[1]] ?? 0) + q;
+      }
+    }
+    return { pips, sources };
+  }, [draft, info]);
+  const curveTips = stats ? curveAdvice(stats.curve, stats.avg_mv, pips, sources) : [];
+  const nonland = stats ? stats.curve.reduce((a, b) => a + b, 0) : 0;
+  const targetAt = (i: number) => (i <= 1 ? CURVE_TARGET[0] / 2 : CURVE_TARGET[i - 1]) * nonland;
+  const curveTop = Math.max(curveMax, ...Array.from({ length: 8 }, (_, i) => targetAt(i)));
 
   const resultRow = (c: CardSummary, extra?: React.ReactNode) => (
-    <div key={c.name} className={`b-row ${inDeck(c.name) && !isBasic(c) ? "in" : ""}`} onMouseEnter={() => setTip(c)} onMouseLeave={() => setTip(null)}>
+    <div key={c.name} className={`b-row ${inDeck(c.name) && !isBasic(c) ? "in" : ""}`} onMouseEnter={() => setTip(c)} onMouseLeave={() => setTip(null)}
+      onContextMenu={(e) => { e.preventDefault(); setTip(null); setOpened(c); }}>
       <span className="b-mv"><ManaCost cost={c.mana_cost} /></span>
       <span className="b-name">
         <span>{c.name}</span>
@@ -266,6 +401,7 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
             </select>
             <input className="field b-deck-name" value={deck.name} onChange={(e) => { setDeck({ ...deck, name: e.target.value }); setSaved(false); }} aria-label="Deck name" />
             <span className={`check-count ${count === 100 ? "ok" : ""}`}>{count}/100</span>
+            <button className="btn" onClick={() => setExporting(true)} disabled={count === 0} title="Copy or download the decklist as text">Export</button>
             <button className="btn btn-primary" disabled={saved} onClick={save}>{saved ? "Saved" : "Save"}</button>
           </div>
           <div className="b-list b-decklist">
@@ -273,7 +409,8 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
               <div className="menu-label">Commander</div>
               {draft.commanders.length === 0 && <p className="muted small">Search on the left and pick a commander to start.</p>}
               {draft.commanders.map((n) => (
-                <div key={n} className="b-row cmdr" onMouseEnter={() => info.get(n) && setTip(info.get(n)!)} onMouseLeave={() => setTip(null)}>
+                <div key={n} className="b-row cmdr" onMouseEnter={() => info.get(n) && setTip(info.get(n)!)} onMouseLeave={() => setTip(null)}
+                  onContextMenu={(e) => { e.preventDefault(); const c = info.get(n); if (c) { setTip(null); setOpened(c); } }}>
                   <span className="b-mv">{info.get(n) && <ManaCost cost={info.get(n)!.mana_cost} />}</span>
                   <span className="b-name"><span>{n}</span><span className="b-type">{info.get(n)?.type_line}</span></span>
                   <button className="ghost b-qty" onClick={() => removeCommander(n)} title="Remove">✕</button>
@@ -286,7 +423,8 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
                 {rows.map(([n, q]) => {
                   const c = info.get(n);
                   return (
-                    <div key={n} className="b-row" onMouseEnter={() => c && setTip(c)} onMouseLeave={() => setTip(null)}>
+                    <div key={n} className="b-row" onMouseEnter={() => c && setTip(c)} onMouseLeave={() => setTip(null)}
+                      onContextMenu={(e) => { e.preventDefault(); if (c) { setTip(null); setOpened(c); } }}>
                       <span className="b-mv">{c && <ManaCost cost={c.mana_cost} />}</span>
                       <span className="b-name"><span>{q > 1 ? `${q}× ` : ""}{n}</span></span>
                       <span className="b-qtys">
@@ -305,15 +443,27 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
         <section className="b-col b-advice">
           {stats && (
             <div className="b-stats">
+              <div className="menu-label b-curve-label">Mana curve <span className="muted">avg {stats.avg_mv.toFixed(2)} · {nonland} spells</span></div>
               <div className="b-curve" aria-label="Mana curve">
                 {stats.curve.map((n, i) => (
-                  <div key={i} className="b-bar" title={`${n} card${n === 1 ? "" : "s"} at ${i === 7 ? "7+" : i} mana`}>
+                  <div key={i} className="b-bar" title={`${n} card${n === 1 ? "" : "s"} at ${i === 7 ? "7+" : i} mana (typical: about ${Math.round(targetAt(i))})`}>
                     <span className="b-bar-n">{n || ""}</span>
-                    <span className="b-bar-fill" style={{ height: `${(n / curveMax) * 100}%` }} />
+                    <span className="b-bar-fill" style={{ height: `${(n / curveTop) * 100}%` }} />
+                    {nonland >= 10 && <span className="b-bar-target" style={{ bottom: `${16 + (targetAt(i) / curveTop) * 78}px` }} />}
                     <span className="b-bar-x">{i === 7 ? "7+" : i}</span>
                   </div>
                 ))}
               </div>
+              {Object.keys(pips).length > 0 && (
+                <div className="b-colors">
+                  {Object.entries(pips).map(([c, n]) => (
+                    <span key={c} className="b-color" title={`${n} ${COLOR_NAME[c]} symbols in spells, ${sources[c] ?? 0} lands make ${COLOR_NAME[c]}`}>
+                      <span className={`pip pip-${c}`} /> {n} <span className="muted">symbols · {sources[c] ?? 0} sources</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {curveTips.length > 0 && <ul className="b-tips b-curve-tips">{curveTips.map((t) => <li key={t}>{t}</li>)}</ul>}
               <div className="b-meters">
                 {meters.map(([r, have, want]) => (
                   <div key={r} className={`b-meter ${have >= want - 1 ? "ok" : ""}`}>
@@ -343,7 +493,13 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
           )}
         </section>
       </div>
-      {tip && <CardTip card={tip} />}
+      {tip && !opened && <CardTip card={tip} />}
+      {opened && (
+        <CardWindow card={opened} onClose={() => setOpened(null)} inDeck={inDeck(opened.name)}
+          onAdd={() => { add(opened); setOpened(null); }}
+          onRemove={() => { if (draft.commanders.includes(opened.name)) removeCommander(opened.name); else remove(opened.name); setOpened(null); }} />
+      )}
+      {exporting && <ExportWindow name={deck.name} text={text} onClose={() => setExporting(false)} />}
       {message && <div className="toast">{message}</div>}
     </div>
   );
