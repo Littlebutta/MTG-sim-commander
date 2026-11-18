@@ -5,7 +5,7 @@ import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
 import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
 import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
-import { DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
+import { DamageModal, DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
 import { ArrowLayer, anchorEl, elementAtPointer, type ArrowSpec } from "./Arrows";
 
 type Mode =
@@ -613,6 +613,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     }
     if (kind === "DeclareAttackers") return "Drag a creature onto the player to attack, or click it to attack " + focused.name + ".";
     if (kind === "DeclareBlockers") return pickedBlocker !== null ? "Now pick the attacker to block." : "Drag a blocker onto the attacker it blocks.";
+    if (kind === "AssignCombatDamage") return "Divide your attacker's damage among its blockers.";
     if (kind === "Priority" && view.stack.length > 0) return "You can respond, or let the top of the stack resolve.";
     return view.active === view.you ? "Your turn" : `${view.players[view.active].name}'s turn`;
   })();
@@ -889,6 +890,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
 
       {kind === "Mulligan" && view.your_decision && <MulliganModal view={view} act={act} onHover={setHover} />}
       {(trigs.length > 1 || (trigs.length === 1 && startedTrigger.current === triggerKey)) && mode.kind === "idle" && <TriggerModal view={view} onDone={startTriggers} />}
+      {kind === "AssignCombatDamage" && view.your_decision && <DamageModal key={JSON.stringify(view.decision)} view={view} act={act} onHover={setHover} />}
       {kind === "Discard" && view.your_decision && <DiscardModal view={view} act={act} onHover={setHover} />}
       {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} />}
 

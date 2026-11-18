@@ -38,6 +38,20 @@ pub enum Decision {
     DeclareBlockers {
         player: PlayerId,
     },
+    /// Divide a blocked attacker's combat damage among its blockers (CR 510.1c), and with
+    /// trample, how much goes past them to the player (CR 702.19b). `blockers` pairs each
+    /// blocker with the damage that counts as lethal for it (1 with deathtouch, CR 702.2c).
+    /// `suggested` is a legal split the player can accept as is.
+    AssignCombatDamage {
+        player: PlayerId,
+        attacker: ObjectId,
+        defender: PlayerId,
+        power: i32,
+        trample: bool,
+        deathtouch: bool,
+        blockers: Vec<(ObjectId, i32)>,
+        suggested: Vec<(Target, i32)>,
+    },
     /// Discard down to maximum hand size in cleanup (CR 514.1).
     Discard {
         player: PlayerId,
@@ -56,6 +70,7 @@ impl Decision {
             | Decision::PutTriggersOnStack { player, .. }
             | Decision::DeclareAttackers { player }
             | Decision::DeclareBlockers { player }
+            | Decision::AssignCombatDamage { player, .. }
             | Decision::Discard { player, .. } => Some(*player),
             Decision::GameOver { .. } => None,
         }
@@ -91,6 +106,8 @@ pub enum Action {
     OrderTriggers(Vec<(usize, Vec<Target>)>),
     Attack(Vec<(ObjectId, PlayerId)>),
     Block(Vec<(ObjectId, ObjectId)>),
+    /// Answer to `Decision::AssignCombatDamage`: how much damage goes where.
+    AssignDamage(Vec<(Target, i32)>),
     Discard(Vec<ObjectId>),
     /// Allowed at any time (CR 104.3a).
     Concede,
@@ -223,6 +240,9 @@ impl Game {
             (Decision::DeclareBlockers { .. }, Action::Block(b)) => {
                 self.declare_blockers(player, b)?
             }
+            (d @ Decision::AssignCombatDamage { .. }, Action::AssignDamage(split)) => {
+                self.assign_damage(d, split)?
+            }
             (Decision::Discard { count, .. }, Action::Discard(cards)) => {
                 self.cleanup_discard(player, cards, count)?
             }
@@ -298,6 +318,23 @@ impl Game {
                         self.stage = Stage::PriorityCheck(self.priority_start_player());
                     }
                 },
+                Stage::Damage => {
+                    let fs = self.step == Step::FirstStrikeDamage;
+                    match self.combat.damage_queue.pop_front() {
+                        Some(a) => {
+                            if let Some(d) = self.damage_decision(a, fs) {
+                                self.wait(d);
+                                return;
+                            }
+                        }
+                        None => {
+                            self.combat_damage(fs);
+                            self.combat.damage_plan.clear();
+                            self.passes = 0;
+                            self.stage = Stage::PriorityCheck(self.priority_start_player());
+                        }
+                    }
+                }
                 Stage::StepEnd => self.end_step(),
             }
         }
@@ -431,16 +468,12 @@ impl Game {
                     })
                 });
                 if any {
-                    self.combat_damage(true);
-                    self.stage = Stage::PriorityCheck(self.priority_start_player());
+                    self.begin_damage(true);
                 } else {
                     self.stage = Stage::StepEnd;
                 }
             }
-            Step::CombatDamage => {
-                self.combat_damage(false);
-                self.stage = Stage::PriorityCheck(self.priority_start_player());
-            }
+            Step::CombatDamage => self.begin_damage(false),
             Step::End => {
                 self.fire(Event::EndStep(ap));
                 self.stage = Stage::PriorityCheck(self.priority_start_player());
@@ -1760,6 +1793,9 @@ impl Game {
             Decision::DeclareBlockers { player } if player == p => {
                 self.stage = Stage::Blockers(std::mem::take(&mut self.pending_blockers));
             }
+            Decision::AssignCombatDamage { player, .. } if player == p => {
+                self.stage = Stage::Damage;
+            }
             Decision::Discard { player, .. } if player == p => self.cleanup_rest(),
             Decision::PutTriggersOnStack { .. } => {
                 self.stage = self
@@ -2005,72 +2041,197 @@ impl Game {
 
     /// CR 510. Damage assignment among multiple blockers is automatic for now: lethal damage to
     /// each blocker in declaration order, the rest to the last (or to the player with trample).
+    /// Whether `id` deals combat damage in this combat damage step (CR 510.4, 702.4c).
+    fn deals_combat_damage(&self, id: ObjectId, first_strike_step: bool, view: &View) -> bool {
+        let Some(c) = view.get(id) else { return false };
+        let fs = c.has_keyword(Keyword::FirstStrike);
+        let ds = c.has_keyword(Keyword::DoubleStrike);
+        if first_strike_step {
+            fs || ds
+        } else {
+            ds || !self.combat.dealt_first_strike.contains(&id)
+        }
+    }
+
+    fn blockers_of(&self, a: ObjectId) -> Vec<ObjectId> {
+        self.combat
+            .blockers
+            .iter()
+            .filter(|(b, x)| *x == a && self.is_on_battlefield(*b))
+            .map(|(b, _)| *b)
+            .collect()
+    }
+
+    /// 510.1: before damage is dealt, the controller of each attacker blocked by two or more
+    /// creatures (or with trample) chooses how to assign its damage.
+    fn begin_damage(&mut self, first_strike_step: bool) {
+        let view = self.view();
+        self.combat.damage_plan.clear();
+        self.combat.damage_queue = self
+            .combat
+            .attackers
+            .iter()
+            .map(|(a, _)| *a)
+            .filter(|a| {
+                self.is_on_battlefield(*a)
+                    && self.combat.blocked.contains(a)
+                    && self.deals_combat_damage(*a, first_strike_step, &view)
+            })
+            .collect();
+        self.stage = Stage::Damage;
+    }
+
+    /// The choice the attacker's controller has to make, if there is a real one.
+    fn damage_decision(&self, a: ObjectId, first_strike_step: bool) -> Option<Decision> {
+        let view = self.view();
+        if !self.is_on_battlefield(a) || !self.deals_combat_damage(a, first_strike_step, &view) {
+            return None;
+        }
+        let c = view.get(a)?;
+        let power = c.power.unwrap_or(0);
+        let player = view.controller(a)?;
+        let defender = self.combat.attackers.iter().find(|(x, _)| *x == a)?.1;
+        let blockers = self.blockers_of(a);
+        let trample = c.has_keyword(Keyword::Trample);
+        if power <= 0 || !self.in_game(player) || blockers.is_empty() {
+            return None;
+        }
+        if blockers.len() < 2 && !trample {
+            return None;
+        }
+        let deathtouch = c.has_keyword(Keyword::Deathtouch);
+        let blockers: Vec<(ObjectId, i32)> = blockers
+            .into_iter()
+            .map(|b| (b, self.lethal_damage(b, deathtouch, &view)))
+            .collect();
+        let suggested = suggest_damage(&blockers, defender, power, trample);
+        Some(Decision::AssignCombatDamage {
+            player,
+            attacker: a,
+            defender,
+            power,
+            trample,
+            deathtouch,
+            blockers,
+            suggested,
+        })
+    }
+
+    /// Lethal damage for a blocker (CR 702.2c, 702.19b): its toughness minus damage already
+    /// marked on it, or 1 from a source with deathtouch. A creature that already has lethal
+    /// damage marked needs none.
+    fn lethal_damage(&self, b: ObjectId, deathtouch: bool, view: &View) -> i32 {
+        let t = view.get(b).and_then(|c| c.toughness).unwrap_or(0);
+        let left = (t - self.objects.get(&b).map(|o| o.damage).unwrap_or(0)).max(0);
+        if deathtouch {
+            left.min(1)
+        } else {
+            left
+        }
+    }
+
+    fn assign_damage(&mut self, d: Decision, split: Vec<(Target, i32)>) -> Result<(), RulesError> {
+        let Decision::AssignCombatDamage {
+            attacker,
+            defender,
+            power,
+            trample,
+            blockers,
+            ..
+        } = d
+        else {
+            return Err(RulesError::WrongAction);
+        };
+        let mut total = 0;
+        let mut to_player = 0;
+        let mut on: Vec<(ObjectId, i32)> = blockers.iter().map(|(b, _)| (*b, 0)).collect();
+        for (t, n) in &split {
+            if *n < 0 {
+                return illegal("damage can't be negative");
+            }
+            total += n;
+            match t {
+                Target::Player(p) if *p == defender && trample => to_player += n,
+                Target::Player(_) => {
+                    return illegal("only a creature with trample can assign damage to the player")
+                }
+                Target::Object(o) => match on.iter_mut().find(|(b, _)| b == o) {
+                    Some(e) => e.1 += n,
+                    None => return illegal("that creature isn't blocking this attacker"),
+                },
+            }
+        }
+        if total != power {
+            return illegal(format!("assign exactly {power} damage"));
+        }
+        if to_player > 0
+            && on
+                .iter()
+                .zip(&blockers)
+                .any(|((_, got), (_, lethal))| got < lethal)
+        {
+            return illegal(
+                "trample: every blocker needs lethal damage before any goes to the player (702.19b)",
+            );
+        }
+        self.combat.damage_plan.retain(|(a, _)| *a != attacker);
+        self.combat.damage_plan.push((attacker, split));
+        self.stage = Stage::Damage;
+        Ok(())
+    }
+
     fn combat_damage(&mut self, first_strike_step: bool) {
         let view = self.view();
-        let deals = |id: ObjectId, game: &Game| -> bool {
-            let Some(c) = view.get(id) else { return false };
-            let fs = c.has_keyword(Keyword::FirstStrike);
-            let ds = c.has_keyword(Keyword::DoubleStrike);
-            if first_strike_step {
-                fs || ds
-            } else {
-                ds || !game.combat.dealt_first_strike.contains(&id)
-            }
-        };
         let mut assignments: Vec<(ObjectId, Target, i32)> = Vec::new();
         for (a, defender) in self.combat.attackers.clone() {
-            if !self.is_on_battlefield(a) || !deals(a, self) {
+            if !self.is_on_battlefield(a) || !self.deals_combat_damage(a, first_strike_step, &view)
+            {
                 continue;
             }
             let c = view.get(a).unwrap();
-            let mut power = c.power.unwrap_or(0);
+            let power = c.power.unwrap_or(0);
             if power <= 0 {
                 continue;
             }
-            let blockers: Vec<ObjectId> = self
-                .combat
-                .blockers
-                .iter()
-                .filter(|(b, x)| *x == a && self.is_on_battlefield(*b))
-                .map(|(b, _)| *b)
-                .collect();
             if !self.combat.blocked.contains(&a) {
                 assignments.push((a, Target::Player(defender), power));
                 continue;
             }
+            let blockers = self.blockers_of(a);
+            let trample = c.has_keyword(Keyword::Trample);
             if blockers.is_empty() {
-                if c.has_keyword(Keyword::Trample) {
+                // 702.19e: a blocked trampler with no blockers left deals all its damage to
+                // the player; otherwise a blocked creature with no blockers deals none (509.1h).
+                if trample {
                     assignments.push((a, Target::Player(defender), power));
                 }
                 continue;
             }
-            let dt = c.has_keyword(Keyword::Deathtouch);
-            for (i, b) in blockers.iter().enumerate() {
-                let bc = view.get(*b).unwrap();
-                let remaining_toughness =
-                    (bc.toughness.unwrap_or(0) - self.objects[b].damage).max(0);
-                let lethal = if dt {
-                    remaining_toughness.min(1)
-                } else {
-                    remaining_toughness
-                };
-                let last = i == blockers.len() - 1;
-                let amt = if last && !c.has_keyword(Keyword::Trample) {
-                    power
-                } else {
-                    lethal.min(power)
-                };
-                if amt > 0 {
-                    assignments.push((a, Target::Object(*b), amt));
+            let chosen = self
+                .combat
+                .damage_plan
+                .iter()
+                .find(|(x, _)| *x == a)
+                .map(|(_, s)| s.clone());
+            let split = chosen.unwrap_or_else(|| {
+                let dt = c.has_keyword(Keyword::Deathtouch);
+                let lethal: Vec<(ObjectId, i32)> = blockers
+                    .iter()
+                    .map(|b| (*b, self.lethal_damage(*b, dt, &view)))
+                    .collect();
+                suggest_damage(&lethal, defender, power, trample)
+            });
+            for (t, n) in split {
+                if n > 0 {
+                    assignments.push((a, t, n));
                 }
-                power -= amt;
-            }
-            if power > 0 {
-                assignments.push((a, Target::Player(defender), power));
             }
         }
         for (b, a) in self.combat.blockers.clone() {
-            if !self.is_on_battlefield(b) || !self.is_on_battlefield(a) || !deals(b, self) {
+            if !self.is_on_battlefield(b)
+                || !self.is_on_battlefield(a)
+                || !self.deals_combat_damage(b, first_strike_step, &view)
+            {
                 continue;
             }
             let p = view.get(b).and_then(|c| c.power).unwrap_or(0);
@@ -2086,6 +2247,51 @@ impl Game {
             }
         }
     }
+}
+
+/// A sensible split of an attacker's damage: kill as many blockers as possible (cheapest
+/// first), then send the rest to the player with trample, or pile it on a blocker that
+/// didn't die.
+pub fn suggest_damage(
+    blockers: &[(ObjectId, i32)],
+    defender: PlayerId,
+    power: i32,
+    trample: bool,
+) -> Vec<(Target, i32)> {
+    let mut order: Vec<usize> = (0..blockers.len()).collect();
+    order.sort_by_key(|i| blockers[*i].1);
+    let mut amt = vec![0; blockers.len()];
+    let mut left = power;
+    for i in order.iter().copied() {
+        let need = blockers[i].1;
+        if need <= left {
+            amt[i] = need;
+            left -= need;
+        }
+    }
+    let killed_all = blockers.iter().zip(&amt).all(|((_, l), a)| a >= l);
+    let mut out: Vec<(Target, i32)> = Vec::new();
+    if left > 0 {
+        if trample && killed_all {
+            out.push((Target::Player(defender), left));
+        } else {
+            // Most damage on the first blocker that won't die, or the last one if all do.
+            let i = order
+                .iter()
+                .copied()
+                .find(|i| amt[*i] < blockers[*i].1)
+                .unwrap_or(*order.last().unwrap());
+            amt[i] += left;
+        }
+    }
+    let mut res: Vec<(Target, i32)> = blockers
+        .iter()
+        .zip(amt)
+        .filter(|(_, a)| *a > 0)
+        .map(|((b, _), a)| (Target::Object(*b), a))
+        .collect();
+    res.extend(out);
+    res
 }
 
 fn player_matches(w: PlayerRef, you: PlayerId, p: PlayerId) -> bool {

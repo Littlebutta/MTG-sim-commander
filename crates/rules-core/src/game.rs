@@ -54,6 +54,9 @@ pub(crate) enum Stage {
     Waiting,
     /// Defending players still to declare blockers, in APNAP order.
     Blockers(VecDeque<PlayerId>),
+    /// Attackers whose controllers choose how to assign combat damage (`Combat::damage_queue`),
+    /// then damage is dealt (CR 510.1–510.2).
+    Damage,
     StepEnd,
     GameOver,
 }

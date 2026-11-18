@@ -917,3 +917,16 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 }
 .lobby-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .lobby-ready { color: var(--good); font-size: 13px; }
+
+/* Combat damage assignment */
+.dmg-cards { align-items: flex-end; gap: 16px; }
+.dmg-slot { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid transparent; transition: border-color .15s, background .15s; }
+.dmg-slot.lethal { border-color: color-mix(in srgb, var(--danger, #e5534b) 60%, transparent); background: color-mix(in srgb, var(--danger, #e5534b) 8%, transparent); }
+.dmg-slot.player { min-width: 140px; min-height: 120px; justify-content: center; border-color: var(--line, rgba(255,255,255,.12)); }
+.dmg-slot.player.locked { opacity: .55; }
+.dmg-player { font-weight: 600; font-size: 1.05rem; }
+.dmg-note { font-size: .8rem; color: var(--muted, #9aa3ad); }
+.dmg-stepper { display: flex; align-items: center; gap: 8px; }
+.dmg-stepper button { width: 30px; height: 30px; border-radius: 50%; font-size: 1.1rem; line-height: 1; }
+.dmg-amount { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-size: 1.2rem; font-weight: 700; }
+.dmg-ok { text-align: center; }

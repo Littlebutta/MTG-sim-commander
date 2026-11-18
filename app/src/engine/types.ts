@@ -12,8 +12,21 @@ export type Decision =
   | { PutTriggersOnStack: { player: number; count: number } }
   | { DeclareAttackers: { player: number } }
   | { DeclareBlockers: { player: number } }
+  | { AssignCombatDamage: AssignDamageDecision }
   | { Discard: { player: number; count: number } }
   | { GameOver: { winner: number | null } };
+
+export interface AssignDamageDecision {
+  player: number;
+  attacker: number;
+  defender: number;
+  power: number;
+  trample: boolean;
+  deathtouch: boolean;
+  /** Each blocker with the damage that is lethal for it. */
+  blockers: [number, number][];
+  suggested: [Target, number][];
+}
 
 export type Action =
   | "Pass"
@@ -27,6 +40,7 @@ export type Action =
   | { OrderTriggers: [number, Target[]][] }
   | { Attack: [number, number][] }
   | { Block: [number, number][] }
+  | { AssignDamage: [Target, number][] }
   | { Discard: number[] }
   | { SetCommanderReturn: boolean };
 

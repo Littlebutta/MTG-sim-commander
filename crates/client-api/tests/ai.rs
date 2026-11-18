@@ -85,6 +85,7 @@ fn advance(g: &mut Game, stop: impl Fn(&Game) -> bool) {
         let a = match d {
             Decision::DeclareAttackers { .. } => Action::Attack(vec![]),
             Decision::DeclareBlockers { .. } => Action::Block(vec![]),
+            Decision::AssignCombatDamage { suggested, .. } => Action::AssignDamage(suggested),
             _ => Action::Pass,
         };
         g.submit(p, a).unwrap();
