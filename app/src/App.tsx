@@ -8,8 +8,10 @@ import { loadSettings } from "./settings";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { SetupScreen } from "./ui/SetupScreen";
 import { Table } from "./ui/Table";
+import { OnlineScreen } from "./ui/OnlineScreen";
+import { listenSteam, onLobby } from "./online";
 
-type Screen = "menu" | "decks" | "setup" | "settings" | "builder";
+type Screen = "menu" | "decks" | "setup" | "settings" | "builder" | "online";
 
 function CardData({ status }: { status: CardStatus | null }) {
   if (!status) return null;
@@ -37,6 +39,7 @@ export function App() {
     checkForUpdate(setUpdate).then(setUpdate);
     appVersion().then(setVersion).catch(() => {});
     loadSettings();
+    void listenSteam();
     // Check MTGJSON for new cards; show progress while it downloads.
     const poll = setInterval(() => cardStatus().then(setCards).catch(() => {}), 1500);
     syncCards()
@@ -46,7 +49,13 @@ export function App() {
     return () => clearInterval(poll);
   }, []);
 
+  // Accepting a Steam invite puts you in a lobby: go to it.
+  useEffect(() => onLobby((l) => {
+    if (l) setScreen((s) => (s === "online" ? s : "online"));
+  }), []);
+
   if (session) return <Table session={session} onExit={() => setSession(null)} />;
+  if (screen === "online") return <OnlineScreen onBack={() => setScreen("menu")} onStart={(s) => { setScreen("menu"); setSession(s); }} />;
   if (screen === "builder") return <BuilderScreen onBack={() => setScreen("menu")} />;
   if (screen === "decks") return <DeckScreen onBack={() => setScreen("menu")} />;
   if (screen === "settings") return <SettingsScreen onBack={() => setScreen("menu")} />;
@@ -78,15 +87,13 @@ export function App() {
 
         <div className="menu-section">
           <button className="btn btn-primary big" onClick={() => setScreen("setup")}>New game</button>
+          <button className="btn big" onClick={() => setScreen("online")}>Play with friends</button>
           <button className="btn big" onClick={() => setScreen("builder")}>Deck builder</button>
           <button className="btn big" onClick={() => setScreen("decks")}>Decks</button>
           <button className="btn big" onClick={() => setScreen("settings")}>Table &amp; cards</button>
           <button className="btn btn-quiet" disabled={loading} onClick={quick}>{loading ? "Shuffling…" : "Quick practice with built-in decks"}</button>
         </div>
 
-        <div className="menu-section soon">
-          <div className="menu-row"><span>Play with friends on Steam</span><span className="chip">Later</span></div>
-        </div>
         <CardData status={cards} />
         {version && <p className="muted small version">Version {version}</p>}
       </div>

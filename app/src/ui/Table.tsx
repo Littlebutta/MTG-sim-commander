@@ -96,7 +96,7 @@ function youGrammar(line: string): string {
   return line.replace(/^You (\w+)\b/, (m, v: string) => (VERBS[v] ? `You ${VERBS[v]}` : m));
 }
 
-export function Table({ session, onExit }: { session: GameSession; onExit: () => void }) {
+export function Table({ session, onExit: exitTable }: { session: GameSession; onExit: () => void }) {
   const [view, setView] = useState<PlayerView>(() => session.view());
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [hover, setHover] = useState<CardView | null>(null);
@@ -116,6 +116,15 @@ export function Table({ session, onExit }: { session: GameSession; onExit: () =>
   const [stackOpen, setStackOpen] = useState(false);
   const [points, setPoints] = useState<RewindPoint[]>([]);
   const settings = useSettings();
+  const onExit = () => {
+    session.leave?.();
+    exitTable();
+  };
+  // Online games change when other players move.
+  useEffect(() => session.subscribe?.((err) => {
+    setView(session.view());
+    if (err) setToast(err);
+  }), [session]);
 
   const me = view.players[view.you];
   const opponents = view.players.filter((p) => !p.is_you);

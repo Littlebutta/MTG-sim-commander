@@ -46,6 +46,23 @@ impl WasmSession {
         self.inner.submit(PlayerId(0), action).map_err(js_err)
     }
 
+    /// JSON `PlayerView` for any seat (the host sends these to the other players online).
+    pub fn view_for(&self, player: u8) -> String {
+        serde_json::to_string(&self.inner.view(PlayerId(player))).unwrap()
+    }
+
+    /// Submit a JSON `Action` for any seat played by a person.
+    pub fn submit_as(&mut self, player: u8, action_json: &str) -> Result<(), JsValue> {
+        let action: Action = serde_json::from_str(action_json).map_err(js_err)?;
+        self.inner.submit(PlayerId(player), action).map_err(js_err)
+    }
+
+    /// Let the computer take over a seat (a player left).
+    pub fn make_ai(&mut self, player: u8) {
+        self.inner
+            .make_ai(PlayerId(player), client_api::Personality::Balanced);
+    }
+
     /// If a computer player is deciding, JSON `{player, think_ms}`; otherwise `null`.
     pub fn next_bot(&mut self) -> String {
         serde_json::to_string(&self.inner.next_bot()).unwrap()

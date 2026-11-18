@@ -258,6 +258,18 @@ impl Session {
         }
     }
 
+    /// Hand a seat to a computer player (someone left an online game). Does nothing if it
+    /// already is one.
+    pub fn make_ai(&mut self, player: PlayerId, personality: Personality) {
+        if self.brains.iter().any(|b| b.me == player) {
+            return;
+        }
+        let mut b = Brain::new(player, personality, 0x5eed ^ player.0 as u64);
+        b.observe(&self.game);
+        self.brains.push(b);
+        self.pending = None;
+    }
+
     /// Submit a person's action. Computer players don't move until asked (see [`Session::next_bot`]).
     pub fn submit(&mut self, player: PlayerId, action: Action) -> Result<(), String> {
         if self.brains.iter().any(|b| b.me == player) {
@@ -403,6 +415,23 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn online_messages_fit_in_a_steam_message() {
+        // Steam's reliable messages top out at 512 KB; decks and views are sent whole.
+        let cards = starter_cards();
+        let index = carddb::CardIndex::new(&cards);
+        let mut biggest = 0;
+        for (name, text) in starter_decklists() {
+            let deck = resolve_deck(&name, &text, &index).unwrap();
+            biggest = biggest.max(serde_json::to_string(&deck).unwrap().len());
+        }
+        let mut s = Session::new_practice(3, 4);
+        s.run_bots();
+        let view = serde_json::to_string(&s.view(PlayerId(0))).unwrap().len();
+        assert!(biggest < 400_000, "deck is {biggest} bytes");
+        assert!(view < 400_000, "view is {view} bytes");
+    }
 
     #[test]
     fn starter_decks_are_100_cards() {
