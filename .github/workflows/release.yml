@@ -64,8 +64,13 @@ jobs:
           rm -rf dist-portable && mkdir -p dist-portable/CommanderTable/data
           cp app/src-tauri/target/release/commander-table.exe "dist-portable/CommanderTable/Commander Table.exe"
           # Steam's library sits next to the exe; the game won't start without it.
-          DLL=$(find app/src-tauri/target/release/build -path '*steamworks-sys-*/out/steam_api64.dll' | head -n1)
-          test -n "$DLL" && cp "$DLL" dist-portable/CommanderTable/
+          # It ships inside the steamworks-sys crate; take it from the same version the build used.
+          shopt -s nullglob
+          DLLS=( "$(cygpath -u "$CARGO_HOME")"/registry/src/*/steamworks-sys-*/lib/steam/redistributable_bin/win64/steam_api64.dll app/src-tauri/target/release/steam_api64.dll app/src-tauri/target/release/build/steamworks-sys-*/out/steam_api64.dll )
+          if [ ${#DLLS[@]} -eq 0 ]; then echo "steam_api64.dll not found"; exit 1; fi
+          echo "Using ${DLLS[-1]}"
+          cp "${DLLS[-1]}" dist-portable/CommanderTable/
+          test -f dist-portable/CommanderTable/steam_api64.dll
           cp docs/PORTABLE-README.txt dist-portable/CommanderTable/README.txt
           printf "Your decks, settings and downloaded card data live here. Updates never overwrite this folder.\n" > dist-portable/CommanderTable/data/README.txt
           ZIP="CommanderTable-v${VER}-windows-portable.zip"
