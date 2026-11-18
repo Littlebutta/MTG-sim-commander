@@ -138,6 +138,9 @@ pub struct Filter {
     pub not_supertypes: Vec<Supertype>,
     pub controller: Option<PlayerRef>,
     pub colors: Option<ColorSet>,
+    /// Object must have none of these colors ("nonblack").
+    #[serde(default)]
+    pub not_colors: Option<ColorSet>,
     /// Only the source object itself.
     pub this_object: bool,
     /// Exclude the source object ("other creatures").

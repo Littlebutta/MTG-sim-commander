@@ -665,6 +665,14 @@ impl Game {
         }
         for (i, targets) in &order {
             let t = &mine[*i];
+            // 603.3d: leaving targets out is only allowed when there's nothing legal to pick.
+            if targets.is_empty()
+                && t.targets()
+                    .iter()
+                    .any(|s| self.legal_targets(p, Some(t.source), s).is_empty())
+            {
+                continue;
+            }
             if !targets.is_empty() || !t.targets().is_empty() {
                 self.check_targets(p, Some(t.source), t.targets(), targets, false)?;
             }

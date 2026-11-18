@@ -16,8 +16,9 @@ pub struct DeckCheck {
     pub color_identity: String,
     /// Follows every Commander deck-building rule.
     pub legal: bool,
-    /// Can be played at all: every card is known and there's a commander. Casual games allow
-    /// decks that break the other rules (wrong size, duplicates...), shown as warnings.
+    /// Can be played at all: every card is known, there's a commander and no card appears more
+    /// often than allowed. Casual games allow decks that break the other rules (wrong size,
+    /// color identity...), shown as warnings.
     pub playable: bool,
     /// Rule problems, in plain English.
     pub problems: Vec<String>,
@@ -48,7 +49,9 @@ fn describe(p: &DeckProblem) -> String {
         DeckProblem::TooManyCommanders => "More than two commanders".into(),
         DeckProblem::NotACommander(n) => format!("{n} can't be a commander"),
         DeckProblem::IncompatiblePartners => "Those two commanders can't be partners".into(),
-        DeckProblem::NotSingleton(n, c) => format!("{c} copies of {n}; only one is allowed"),
+        DeckProblem::NotSingleton(n, c) => {
+            format!("{c} copies of {n}; Commander decks allow only one of each card")
+        }
         DeckProblem::OutsideColorIdentity(n) => {
             format!("{n} is outside your commander's color identity")
         }
@@ -73,7 +76,13 @@ pub fn check_deck(text: &str, index: &CardIndex) -> DeckCheck {
         .iter()
         .filter_map(|(_, n)| index.get(n).map(|c| c.def.name.clone()))
         .collect();
-    let playable = unknown.is_empty() && !commanders.is_empty() && commanders.len() <= 2;
+    // Commander is a singleton format: a deck with extra copies can't be played (CR 903.5b).
+    let singleton = !report
+        .problems
+        .iter()
+        .any(|p| matches!(p, DeckProblem::NotSingleton(..)));
+    let playable =
+        unknown.is_empty() && !commanders.is_empty() && commanders.len() <= 2 && singleton;
     let color_identity = Color::ALL
         .iter()
         .filter(|c| report.color_identity.contains(**c))

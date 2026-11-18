@@ -154,6 +154,34 @@ fn partners_ok(a: &CardRecord, b: &CardRecord) -> bool {
         || (has_kw(b, "Doctor's companion") && a.def.subtypes.iter().any(|s| s == "Doctor"))
 }
 
+/// How many copies of a card a Commander deck may hold (CR 903.5b): one, unless it's a basic
+/// land or its text says otherwise ("any number of cards named", "up to seven cards named").
+pub fn copies_allowed(c: &CardRecord) -> u32 {
+    let text = c.def.oracle_text.to_lowercase();
+    if c.def.supertypes.contains(&Supertype::Basic)
+        || text.contains("a deck can have any number of cards named")
+    {
+        return u32::MAX;
+    }
+    if let Some(rest) = text.split("a deck can have up to ").nth(1) {
+        let word = rest.split_whitespace().next().unwrap_or("");
+        let n = match word {
+            "two" => 2,
+            "three" => 3,
+            "four" => 4,
+            "five" => 5,
+            "six" => 6,
+            "seven" => 7,
+            "eight" => 8,
+            "nine" => 9,
+            "ten" => 10,
+            w => w.parse().unwrap_or(1),
+        };
+        return n;
+    }
+    1
+}
+
 /// Validate a decklist against CR 903.5 and the Commander banned list.
 pub fn validate(list: &DeckList, index: &CardIndex) -> DeckReport {
     let mut r = DeckReport::default();
@@ -211,13 +239,11 @@ pub fn validate(list: &DeckList, index: &CardIndex) -> DeckReport {
             r.unsupported.push(c.def.name.clone());
         }
     }
+    let mut counts: Vec<(String, u32)> = counts.into_iter().collect();
+    counts.sort();
     for (name, n) in counts {
         let c = index.get(&name).unwrap();
-        let any_number = c.def.supertypes.contains(&Supertype::Basic)
-            || c.def
-                .oracle_text
-                .contains("A deck can have any number of cards named");
-        if n > 1 && !any_number {
+        if n > copies_allowed(c) {
             r.problems.push(DeckProblem::NotSingleton(name, n));
         }
     }
