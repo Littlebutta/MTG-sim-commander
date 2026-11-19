@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { lookupCards, searchCards, type CardSummary } from "../decks";
 import type { CardView } from "../engine/types";
 import { BuilderScreen } from "../ui/BuilderScreen";
-import { Card, CardPreview } from "../ui/Card";
+import { CardPreview, RulesText } from "../ui/Card";
+import { explain } from "../ui/keywords";
 import { checkAdventureDeck, type AdventureDeckCheck } from "./api";
 import { personSprite } from "./art";
 import { BASICS, BOSS_IDS, DUELIST_IDS, ENDGAME_IDS, PEOPLE, REAGENTS, SIGILS, listText, type Person } from "./content";
@@ -391,6 +392,18 @@ export function Spoils({ title, options, picks, onDone }: { title: string; optio
   );
 }
 
+/** Keyword reminders for a found card, so you know what it does without opening anything. */
+function FoundTerms({ card }: { card: CardSummary }) {
+  const kws = card.oracle_text.split("\n").flatMap((l) => l.split(/,\s*/)).map((w) => w.trim()).filter((w) => /^[A-Z][a-z]+( [a-z]+)?$/.test(w));
+  const terms = explain(kws, card.oracle_text);
+  if (terms.length === 0) return null;
+  return (
+    <dl className="glossary adv-found-terms">
+      {terms.map(([k, v]) => <div key={k}><dt>{k}</dt><dd><RulesText text={v} /></dd></div>)}
+    </dl>
+  );
+}
+
 export function Found({ card, reagent, sigil, onClose }: { card?: string; reagent?: string; sigil?: string; onClose: () => void }) {
   const sums = useSummaries(card ? [card] : []);
   const s = card ? sums.get(card) : undefined;
@@ -404,8 +417,9 @@ export function Found({ card, reagent, sigil, onClose }: { card?: string; reagen
         {card && (
           <>
             <div className="adv-found-label">You found a card!</div>
-            {s ? <div className="adv-found-card"><Card card={asView(s)} size="hand" /></div> : null}
-            <div className="adv-found-name">{card}</div>
+            {s ? <div className="adv-found-card"><CardPreview card={asView(s)} /></div> : <div className="adv-found-name">{card}</div>}
+            {s && <FoundTerms card={s} />}
+            {s && <div className="adv-found-note">{s.type_line.includes("Land") ? "A land for your deck." : `Added to your satchel. Open your spellbook to put it in your deck.`}</div>}
           </>
         )}
         {r && (

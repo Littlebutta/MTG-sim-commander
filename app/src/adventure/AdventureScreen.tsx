@@ -550,6 +550,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       world: () => worldRef.current,
       victory: (id: string) => worldRef.current && run(() => victory(worldRef.current!, id)),
       go: (map: string, x: number, y: number) => worldRef.current?.enter({ map, x, y, dir: "down" }),
+      found: (card: string) => run(() => showFound({ card })),
     };
   }
 

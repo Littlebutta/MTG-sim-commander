@@ -201,7 +201,7 @@
 .adv-spoil .adv-btn { font-family: var(--pixel); }
 .adv-spoil-blank { width: 260px; height: 360px; display: grid; place-items: center; border: 3px dashed var(--frame); font-family: var(--pixel); }
 
-.adv-found { position: relative; display: flex; flex-direction: column; align-items: center; padding: 28px 46px; background: var(--paper); border: 4px solid var(--frame); box-shadow: inset 0 0 0 4px var(--paper-2), 0 0 0 4px var(--paper-3), 0 14px 0 4px rgba(0, 0, 0, 0.4); animation: adv-found 0.35s cubic-bezier(.2, 1.6, .5, 1); overflow: hidden; max-width: 460px; text-align: center; }
+.adv-found { position: relative; display: flex; flex-direction: column; align-items: center; padding: 28px 46px; background: var(--paper); border: 4px solid var(--frame); box-shadow: inset 0 0 0 4px var(--paper-2), 0 0 0 4px var(--paper-3), 0 14px 0 4px rgba(0, 0, 0, 0.4); animation: adv-found 0.35s cubic-bezier(.2, 1.6, .5, 1); overflow: hidden; max-width: 520px; text-align: center; }
 @keyframes adv-found { from { transform: scale(0.6); opacity: 0; } }
 .adv-found-rays { position: absolute; inset: -50%; background: repeating-conic-gradient(from 0deg, rgba(242, 199, 92, 0.18) 0 10deg, transparent 10deg 20deg); animation: adv-spin 12s linear infinite; pointer-events: none; }
 @keyframes adv-spin { to { transform: rotate(360deg); } }
@@ -320,3 +320,10 @@
 .adv-slot-text .muted { font-size: 13px; line-height: 1.5; }
 .adv-slot-actions { display: flex; align-items: center; gap: 8px; }
 .adv-slot-hint { text-align: center; }
+
+/* A found card shows its full details. */
+.adv-found-card .preview { width: 340px; max-width: 80vw; text-align: left; position: static; transform: none; }
+.adv-found-note { font: 400 15px var(--pixel); color: var(--ink-soft); margin-top: 12px; }
+.adv-found-card .hint-right { display: none; }
+.adv-found-terms { width: 340px; max-width: 80vw; text-align: left; font-family: var(--sans); background: #1a1322; color: var(--text); padding: 10px; border: 3px solid var(--frame); }
+.adv-found-terms dt { color: var(--accent-2); }
