@@ -5,6 +5,8 @@
 import decksJson from "./data/decks.json";
 import type { Personality } from "../engine/session";
 
+import type { CreatureKind } from "./art";
+
 export type Extra = "hat" | "hood" | "helm" | "beard" | "crown" | "cap" | "bandana" | "horns" | "none";
 
 /** How a person looks: colors for the sprite, plus one feature. */
@@ -14,6 +16,8 @@ export interface Look {
   cloth: string;
   accent: string;
   extra?: Extra;
+  /** Not a person at all: a creature, drawn from its own sprite. */
+  creature?: CreatureKind;
   /** Color of the hat, hood, helm, crown... */
   extraColor?: string;
   /** Bosses glow. */
@@ -139,9 +143,9 @@ export const PEOPLE: Record<string, Person> = {
     after: ["Strike first and they never strike back. Most of the time."],
   },
   tam: {
-    name: "Tam", title: "Goblin-catcher", look: L(2, "#8b4513", "#a0522d", "#ff4500", "cap", "#556b2f"),
+    name: "Tam", title: "Goblin boss", look: { creature: "goblin", cloth: "#6fae3a", skin: "#a8d468", hair: "#8a4b25", accent: "#e8c27a" },
     duel: { deck: "tam", style: "Aggressive", rank: "duelist", theme: "Lots of little goblins, all at once" },
-    intro: ["I catch goblins for a living. Kept a few. Want to meet them?"],
+    intro: ["Oi! I'm the boss of this lot. Well, most of 'em. Want to meet the rest? All at once?"],
     beaten: ["They scattered! It'll take me all week to round them up."],
     gloat: ["Never underestimate a crowd of goblins."],
     after: ["Goblins are cheap, fast and loud. Like me."],
@@ -163,12 +167,12 @@ export const PEOPLE: Record<string, Person> = {
     after: ["Keep a Giant Growth in hand. It wins more fights than it should."],
   },
   nell: {
-    name: "Nell", title: "Old fisher", look: L(4, "#dcdcdc", "#4682b4", "#f0e68c", "hat", "#f0e68c"),
+    name: "Nell", title: "Merfolk tide-singer", look: { creature: "merfolk", cloth: "#4f9fb0", skin: "#bfe6dc", hair: "#2f6d8a", accent: "#7fe0c8" },
     duel: { deck: "nell", style: "Controlling", rank: "duelist", theme: "Merfolk who wriggle past your guard" },
-    intro: ["Fish aren't biting. Maybe you will. Sit down, let's play."],
-    beaten: ["Slipped the hook, you did. Fair catch."],
-    gloat: ["Reeled in. They always come in eventually."],
-    after: ["Patience is the whole trick. Fishing and dueling both."],
+    intro: ["The tide brought you in, landwalker. Sit by the water and play with me."],
+    beaten: ["Slipped through the net, you did. Fair catch."],
+    gloat: ["Reeled in. The tide always comes back in."],
+    after: ["Patience is the whole trick. The sea taught me that."],
   },
 
   // ---------------------------------------------------------------- Mirefen and Hollow Barrow
@@ -242,11 +246,11 @@ export const PEOPLE: Record<string, Person> = {
     after: ["Life is a resource. Spend it. Earn it back."],
   },
   lune: {
-    name: "Lune", title: "Griffin rider", look: L(0, "#b0e0e6", "#87ceeb", "#ffffff", "cap", "#ffffff"),
+    name: "Lune", title: "Griffin of the high cliffs", look: { creature: "griffin", cloth: "#c89a52", skin: "#f1e2bf", hair: "#f5f2ea", accent: "#f2c230", extraColor: "#e6dccb" },
     duel: { deck: "lune", style: "Aggressive", rank: "duelist", theme: "Hawks, griffins and angels over your head" },
-    intro: ["The skies are mine! Can your deck block a griffin? Let's find out!"],
+    intro: ["Skree! The skies are mine! Can your deck block a griffin? Let's find out!"],
     beaten: ["Grounded! Ugh. Pick something, quickly, before I take off."],
-    gloat: ["Look up, friend. Always look up."],
+    gloat: ["Look up, wingless one. Always look up."],
     after: ["Flying wins games. Reach and removal win them back."],
   },
   osric: {
@@ -279,12 +283,12 @@ export const PEOPLE: Record<string, Person> = {
 
   // ---------------------------------------------------------------- Emberpeak and the Cinder Depths
   brakka: {
-    name: "Brakka", title: "Pit brawler", look: L(4, "#8b0000", "#8b4513", "#ff6347", "bandana", "#ff6347"),
+    name: "Brakka", title: "Minotaur pit brawler", look: { creature: "minotaur", cloth: "#7a4a2a", skin: "#c79a6a", hair: "#5a3a22", accent: "#efe2c4" },
     duel: { deck: "brakka", style: "Aggressive", rank: "duelist", theme: "Big, fast, and swinging before you blink" },
-    intro: ["You! You look soft. I'll fix that. Fists up, cards out!"],
+    intro: ["HRRAH! You look soft. I'll fix that. Horns down, cards out!"],
     beaten: ["Ha! You hit like a rockslide. Take a card. Take two, no, one."],
     gloat: ["Too slow! Haste, friend. Haste."],
-    after: ["Kamahl taught me everything. Mostly how to hit things."],
+    after: ["Charge first, think later. It works more often than you'd think."],
   },
   snag: {
     name: "Chief Snag", title: "of the Ashfoot goblins", look: L(5, "#6b8e23", "#8b4513", "#ffd700", "horns", "#f5f5dc"),
@@ -311,10 +315,10 @@ export const PEOPLE: Record<string, Person> = {
     after: ["Guttersnipe deals 2 to you every time I cast an instant or sorcery. It adds up fast."],
   },
   sora: {
-    name: "Sora", title: "Drake-tamer", look: L(1, "#1a1a1a", "#dc143c", "#ffd700", "bandana", "#ffd700"),
+    name: "Sora", title: "A young fire drake", look: { creature: "dragon", cloth: "#c8321e", skin: "#f2b25c", hair: "#c8321e", accent: "#ffd25a", extraColor: "#8e1f14" },
     duel: { deck: "sora", style: "Balanced", rank: "duelist", theme: "Dragons and whelps, with burn for anything that blocks" },
-    intro: ["The Molten King's dragons nest past here. I raise the young ones. Want to meet them?"],
-    beaten: ["My whelps need more training. And snacks. Go on through."],
+    intro: ["Hrrm. A small warm-blood, walking into my nest. The Molten King's brood grows past here. Show me your fire."],
+    beaten: ["Hss. You burn brighter than you look. Take something from my hoard. One thing."],
     gloat: ["Dragons rule the sky. Always have."],
     after: ["A dragon with firebreathing gets bigger the more mountains you have."],
   },
@@ -356,12 +360,12 @@ export const PEOPLE: Record<string, Person> = {
     after: ["Wee Dragonauts get +2/+0 for every instant or sorcery. Every one."],
   },
   ambrose: {
-    name: "Professor Ambrose", look: L(1, "#f5f5f5", "#2f4f4f", "#4682b4", "hat", "#2f4f4f"),
+    name: "Ambrose", title: "Djinn of the lamp", look: { creature: "djinn", cloth: "#4a7fd0", skin: "#9fc2f0", hair: "#2f4f8f", accent: "#f2c230", aura: "#8fc4ff" },
     duel: { deck: "ambrose", style: "Controlling", rank: "duelist", theme: "Counterspells, card draw and big djinn" },
-    intro: ["Ah, a student! No? A duelist? Same thing. Lesson one: no."],
+    intro: ["Ah, a visitor! You get no wishes, I'm afraid. You get a lesson. Lesson one: no."],
     beaten: ["Excellent work. Full marks. Take this home and study it."],
     gloat: ["Countered. Do try to keep up."],
-    after: ["Counterspell is only as good as your patience. And my patience is excellent."],
+    after: ["Counterspell is only as good as your patience. And I have had a thousand years of practice."],
   },
   sela: {
     name: "Sela", title: "the Tide-Witch", look: L(0, "#008b8b", "#2e8b57", "#e0ffff", "hood", "#2e8b57"),
@@ -385,10 +389,10 @@ export const PEOPLE: Record<string, Person> = {
 
   // ---------------------------------------------------------------- the Verdant Wilds and Thornheart Hollow
   thorne: {
-    name: "Ranger Thorne", look: L(2, "#556b2f", "#2e4a1e", "#8fbc8f", "hood", "#2e4a1e"),
+    name: "Thornweb", title: "Matriarch of the wood", look: { creature: "spider", cloth: "#3a3346", skin: "#6b5d7a", hair: "#3a3346", accent: "#c9b26a" },
     duel: { deck: "thorne", style: "Controlling", rank: "duelist", theme: "Spiders and archers: nothing flies over them" },
-    intro: ["Quiet. The spiders are listening. So am I. Let's see what you've got."],
-    beaten: ["Good tracking. Here's something from the trail."],
+    intro: ["Quiet. Every thread in this wood tells me where you step. Let's see what you've got."],
+    beaten: ["Good. You cut the strands cleanly. Here, something caught in my web."],
     gloat: ["Caught in the web."],
     after: ["Reach blocks flyers. Deathtouch kills whatever it blocks."],
   },
@@ -401,10 +405,10 @@ export const PEOPLE: Record<string, Person> = {
     after: ["There's a dino out there with ten power. TEN!"],
   },
   oakhart: {
-    name: "Mother Oakhart", look: L(3, "#228b22", "#f5f5dc", "#228b22", "hood", "#6b8e23"),
+    name: "Mother Oakhart", title: "Ancient treefolk", look: { creature: "treefolk", cloth: "#7a5a3a", skin: "#a07a52", hair: "#3f8f3a", accent: "#c7e07a" },
     duel: { deck: "oakhart", style: "Balanced", rank: "duelist", theme: "Forest and field: wolves, knights and an anthem" },
-    intro: ["The wilds raise their children strong. Let me show you."],
-    beaten: ["Grown well, you have. Take a seed from my pocket."],
+    intro: ["Hmmm. Five hundred winters I have stood here. The wilds raise their children strong. Let me show you."],
+    beaten: ["Grown well, you have. Take a seed from my branches."],
     gloat: ["Rest a while, little sprout."],
     after: ["Green and white together make a strong family."],
   },

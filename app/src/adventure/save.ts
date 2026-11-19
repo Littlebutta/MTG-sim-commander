@@ -39,6 +39,8 @@ export interface Save extends Place {
   pools?: PoolId[];
   /** 2 once the default pool became the whole library. */
   poolsV?: number;
+  /** 2 once the overworld grew by a quarter (positions saved before then are scaled). */
+  worldV?: number;
   /** Seeds where this journey's lost cards and chests lie. */
   seed?: number;
   created: number;
@@ -51,7 +53,7 @@ export function newSave(name: string, start: Place): Save {
   return {
     v: 1, name, ...start, respawn: start, stone: null, collection: {}, deck: {}, deckName: "My deck", reagents: {}, sigils: [], flags: {},
     starter: null, seenRegions: [], playtime: 0, wins: 0, losses: 0, brews: 0, created: Date.now(), saved: Date.now(),
-    poolsV: 2, seed: Math.floor(Math.random() * 2 ** 31),
+    poolsV: 2, worldV: 2, seed: Math.floor(Math.random() * 2 ** 31),
   };
 }
 
@@ -70,6 +72,13 @@ function valid(raw: unknown): Save | null {
   if ((s.poolsV ?? 1) < 2) {
     if (!s.pools?.length || (s.pools.length === 1 && s.pools[0] === "elderreach")) out.pools = ["library"];
     out.poolsV = 2;
+  }
+  // The overworld grew by a quarter in each direction: move older positions to match.
+  if ((s.worldV ?? 1) < 2) {
+    const grow = (p: Place): Place => (p.map === "overworld" ? { ...p, x: Math.round(p.x * 1.25), y: Math.round(p.y * 1.25) } : p);
+    Object.assign(out, grow({ map: out.map, x: out.x, y: out.y, dir: out.dir }));
+    out.respawn = grow(out.respawn);
+    out.worldV = 2;
   }
   return out;
 }

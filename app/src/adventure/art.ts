@@ -544,6 +544,11 @@ export function personSprite(look: Look, dir: Dir, frame: number): HTMLCanvasEle
   const key = `${JSON.stringify(look)}|${dir}|${frame}`;
   const hit = spriteCache.get(key);
   if (hit) return hit;
+  if (look.creature) {
+    const cr = creatureSprite(look, dir, frame);
+    spriteCache.set(key, cr);
+    return cr;
+  }
   const cv = document.createElement("canvas");
   cv.width = TILE;
   cv.height = TILE;
@@ -607,6 +612,362 @@ export function personSprite(look: Look, dir: Dir, frame: number): HTMLCanvasEle
   const hd = refineSprite(cv, grid, look);
   spriteCache.set(key, hd);
   return hd;
+}
+
+// ---------------------------------------------------------------- creatures
+
+export type CreatureKind = "dragon" | "griffin" | "merfolk" | "goblin" | "spider" | "treefolk" | "djinn" | "minotaur";
+
+/** Creature sprites: o outline, b body, d shade, l belly, w/x wings, e eyes, a horns and claws,
+ *  h mane or leaves, t teeth, g glow. Left is right mirrored; up is the front with no face. */
+const CREATURES: Record<CreatureKind, { down: string[]; right: string[] }> = {
+  dragon: {
+    down: [
+      "................",
+      "..a..........a..",
+      "..ao.oooooo.oa..",
+      "...oobbbbbboo...",
+      "x..obebbbbebo..x",
+      "xx.obbbbbbbbo.xx",
+      "wxx.obbttbbo.xxw",
+      "wwxxoobbbbooxxww",
+      "wwwxobllllboxwww",
+      ".wwobllllllbowww",
+      "..wobllllllbow..",
+      "...obllllllbo...",
+      "...obbbbbbbbo...",
+      "...obdo..odbo...",
+      "...oao....oao...",
+      "....o......o....",
+    ],
+    right: [
+      "................",
+      ".....xx.........",
+      "....xwwx...a....",
+      "...xwwwwx.aoo...",
+      "...xwwwwwxobbo..",
+      "....xwwwwobbebo.",
+      ".....xwwobbbbbbo",
+      "......xobbbbtbto",
+      "..ooo.obbbbooo..",
+      ".obbbo.obbbo....",
+      "obo.obbbblbbo...",
+      "oo...obbllllbo..",
+      ".....obbllllbo..",
+      "......obbbbbo...",
+      "......obdoobdo..",
+      "......oao..oao..",
+    ],
+  },
+  griffin: {
+    down: [
+      "................",
+      ".....oooooo.....",
+      "....ohhhhhho....",
+      "...ohehhhhehho..",
+      "...ohhhaahhho...",
+      "x...ohhaahho...x",
+      "wx...ohhhho...xw",
+      "wwx.obbbbbbo.xww",
+      "wwwxobllllboxwww",
+      ".wwobllllllbowww",
+      "..wobllllllbow..",
+      "...obbbbbbbbo...",
+      "...obbbbbbbbo...",
+      "...obdo..odbo...",
+      "...oao....oao...",
+      "....o......o....",
+    ],
+    right: [
+      "................",
+      "........ooooo...",
+      ".......ohhhhho..",
+      "......ohhhhheho.",
+      "...xx.ohhhhhhaa.",
+      "..xwwxohhhhho.a.",
+      ".xwwwwxohhho....",
+      ".xwwwwwxbbbbo...",
+      "..xwwwwbbbbbbo..",
+      "o..xxwbbbllbbo..",
+      "ob..obbbllllbo..",
+      ".ob.obbbllllbo..",
+      "..oobbbbbbbbo...",
+      "....obdbobdbo...",
+      "....oao.oao.....",
+      "................",
+    ],
+  },
+  merfolk: {
+    down: [
+      "................",
+      ".....oooooo.....",
+      "...aohhhhhhoa...",
+      "..aaohhhhhhoaa..",
+      "...ohbbbbbbho...",
+      "...obebbbbebo...",
+      "...obbbbbbbbo...",
+      "....oobbbboo....",
+      "...obbaaaabbo...",
+      "..obbllllllbbo..",
+      "..obobllllbobo..",
+      "...o.obllbo.o...",
+      ".....obddbo.....",
+      "......obbo......",
+      ".....oaooao.....",
+      "....oaa..aao....",
+    ],
+    right: [
+      "................",
+      ".....ooooo......",
+      "....ohhhhhoa....",
+      "...ohhhhhhhoa...",
+      "...ohhhbbbboaa..",
+      "...ohhbbbebo....",
+      "....ohbbbbbbo...",
+      ".....oobbboo....",
+      "....obbaaabo....",
+      "....obllllbbo...",
+      "....obllllbobo..",
+      ".....obllbo.o...",
+      "......obddbo....",
+      ".......obbbo....",
+      "......oaooaao...",
+      ".....oaa...aao..",
+    ],
+  },
+  goblin: {
+    down: [
+      "................",
+      "................",
+      "......oooo......",
+      "oa..oobbbboo..ao",
+      "obao.obbbbo.oabo",
+      ".obbobbbbbbobbo.",
+      "..oobebbbbeboo..",
+      "....obbbbbbo....",
+      "....obttttbo....",
+      ".....oobboo.....",
+      "....ohhhhhho....",
+      "...obhhhhhhbo...",
+      "...obhhhhhhbo...",
+      "....ohhddhho....",
+      "....obbo.obbo...",
+      "....ooo...ooo...",
+    ],
+    right: [
+      "................",
+      "................",
+      "......oooo......",
+      ".....obbbboo....",
+      "...aobbbbbbbo...",
+      "..aboobbbbebo...",
+      "..obbobbbbbbbo..",
+      "...oo.obbbbtto..",
+      "......oobbooo...",
+      ".....ohhhhho....",
+      "....obhhhhhho...",
+      "....obhhhhhbo...",
+      ".....ohhhhho....",
+      ".....ohhddho....",
+      ".....obbo.obo...",
+      ".....ooo..ooo...",
+    ],
+  },
+  spider: {
+    down: [
+      "................",
+      "................",
+      "......oooo......",
+      ".....obbbbo.....",
+      "....obbddbbo....",
+      "....obbddbbo....",
+      "o..o.obbbbo.o..o",
+      "ob.ob.obbo.bo.bo",
+      ".obbobbbbbbobbo.",
+      "..oobegeegeboo..",
+      ".obbobbbbbbobbo.",
+      "ob.obbobbobbo.bo",
+      "o..ob.oaao.bo..o",
+      "...o...oo...o...",
+      "................",
+      "................",
+    ],
+    right: [
+      "................",
+      "................",
+      "................",
+      "...oooo.........",
+      "..obbbbo........",
+      ".obbddbbo.......",
+      ".obbddbboo..o...",
+      "..obbbbbbboob...",
+      "...oobbbbbbbo...",
+      "..ob.obbbbegeo..",
+      ".ob.ob.obbbbao..",
+      "ob.ob.ob.oobo...",
+      "o..o..o..ob.bo..",
+      ".........o...o..",
+      "................",
+      "................",
+    ],
+  },
+  treefolk: {
+    down: [
+      "..hh..hhhh..hh..",
+      ".hhhhhhhhhhhhhh.",
+      "hhhhhhhhhhhhhhhh",
+      ".hhhhohhhhohhhh.",
+      "..hhobbbbbbohh..",
+      "...obdbbbbdbo...",
+      "...obebbbbebo...",
+      "...obbbddbbbo...",
+      "..obbdboobdbbo..",
+      ".obobbbbbbbbobo.",
+      "ob.obbdbbdbbo.bo",
+      "o..obbbbbbbbo..o",
+      "...obdbbbbdbo...",
+      "...obbo..obbo...",
+      "..obbo....obbo..",
+      "..oooo....oooo..",
+    ],
+    right: [
+      "...hh.hhhh......",
+      "..hhhhhhhhhh....",
+      ".hhhhhhhhhhhh...",
+      "..hhhhhhhhhhh...",
+      "....ohhhhhoo....",
+      "....obbbbbbo....",
+      "....obdbbbebo...",
+      "....obbbbbbbo...",
+      "...obbdbbbdbo...",
+      "..obobbbbbbbbo..",
+      ".ob.obbdbbbo.bo.",
+      ".o..obbbbbbo..o.",
+      "....obdbbbdo....",
+      "....obbo.obbo...",
+      "...obbo...obbo..",
+      "...oooo...oooo..",
+    ],
+  },
+  djinn: {
+    down: [
+      "......oaao......",
+      ".....oaaaao.....",
+      "....oaaaaaao....",
+      "....obbbbbbo....",
+      "....obebbebo....",
+      "....obbbbbbo....",
+      ".....obttbo.....",
+      "...oobbbbbboo...",
+      "..obbbllllbbbo..",
+      ".obbobllllbobbo.",
+      ".oao.obllbo.oao.",
+      ".....ogggggo....",
+      "......ogggo.....",
+      ".......ogggo....",
+      "........ogo.....",
+      ".........o......",
+    ],
+    right: [
+      "......oaao......",
+      ".....oaaaao.....",
+      "....oaaaaaao....",
+      ".....obbbbbo....",
+      ".....obbbebo....",
+      ".....obbbbbbo...",
+      "......obttbo....",
+      ".....oobbbboo...",
+      "....obbbllbbbo..",
+      "....obbbllbbobo.",
+      "....oaobllbo.oao",
+      ".....ogggggo....",
+      "......ogggo.....",
+      ".......ogggo....",
+      "........ogo.....",
+      ".........o......",
+    ],
+  },
+  minotaur: {
+    down: [
+      "a..............a",
+      "aa............aa",
+      ".aa..oooooo..aa.",
+      "..aaobbbbbboaa..",
+      "....obebbebo....",
+      "...obbbbbbbbo...",
+      "....oblttlbo....",
+      "..oooobbbboooo..",
+      ".obbbbbbbbbbbbo.",
+      "obbobbbbbbbbobbo",
+      "obo.obbbbbbo.obo",
+      "oao.ohhhhhho.oao",
+      "....ohhddhho....",
+      "....obbo.obbo...",
+      "....obbo.obbo...",
+      "....oaao.oaao...",
+    ],
+    right: [
+      "................",
+      "......a.........",
+      ".....aa.........",
+      "....aaoooo......",
+      "......obbbbo....",
+      ".....obbbbebo...",
+      ".....obbbbbblo..",
+      "......obbblllto.",
+      "...ooobbbbooo...",
+      "..obbbbbbbbbo...",
+      "..obbbbbbbobbo..",
+      "..obobbbbbo.obo.",
+      "...ooohhhhho.oao",
+      ".....ohhddho....",
+      ".....obbo.obbo..",
+      ".....oaao.oaao..",
+    ],
+  },
+};
+
+/** A creature, 16×16, colored from a Look: cloth is the body, skin the belly, hair the mane,
+ *  accent the horns and claws, extraColor the wings. Walk frame 1 bobs. */
+function creatureSprite(look: Look, dir: Dir, frame: number): HTMLCanvasElement {
+  const kind = look.creature!;
+  const cv = document.createElement("canvas");
+  cv.width = TILE;
+  cv.height = TILE;
+  const c = cv.getContext("2d")!;
+  const tpl = CREATURES[kind];
+  let rows = dir === "left" || dir === "right" ? tpl.right : tpl.down;
+  if (dir === "up") rows = rows.map((r) => r.replace(kind === "djinn" ? /[elt]/g : /[eltg]/g, "b"));
+  const wing = look.extraColor ?? shade(look.cloth, 0.8);
+  const pal: Record<string, string> = {
+    o: "#1b1420", b: look.cloth, d: shade(look.cloth, 0.7), l: look.skin, w: wing, x: shade(wing, 0.7),
+    e: "#1b1420", a: look.accent, h: look.hair, t: "#f4efe2", g: look.aura ?? look.accent,
+  };
+  if (kind === "spider") pal.e = "#ff3355";
+  const grid: string[][] = Array.from({ length: TILE }, () => Array(TILE).fill(""));
+  const bob = frame % 2 ? 1 : 0;
+  rows.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      const col = pal[ch];
+      if (!col) return;
+      const xx = dir === "left" ? 15 - x : x;
+      const yy = y - bob;
+      if (yy < 0) return;
+      px(c, xx, yy, col);
+      // Person shading rules: body like cloth, belly like skin, mane like hair.
+      grid[yy][xx] = ({ b: "c", d: "d", l: "s", h: "h", e: "e", a: "a", o: "o" } as Record<string, string>)[ch] ?? "x";
+    });
+  });
+  if (bob) {
+    // Feet stay on the ground while the body bobs.
+    rows.slice(14).forEach((row, i) => {
+      [...row].forEach((ch, x) => {
+        const col = pal[ch];
+        if (col) px(c, dir === "left" ? 15 - x : x, 14 + i, col);
+      });
+    });
+  }
+  return refineSprite(cv, grid, look);
 }
 
 /** Double a sprite and add half-pixel shading: light from the upper left, folds in cloth, a
