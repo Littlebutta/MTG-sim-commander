@@ -147,6 +147,13 @@ fn illegal<T>(s: impl Into<String>) -> Result<T, RulesError> {
     Err(RulesError::Illegal(s.into()))
 }
 
+/// Whether evasion abilities let `blocker` block `attacker` (CR 702.9b: flying).
+fn evasion_allows_block(attacker: &Characteristics, blocker: &Characteristics) -> bool {
+    !attacker.has_keyword(Keyword::Flying)
+        || blocker.has_keyword(Keyword::Flying)
+        || blocker.has_keyword(Keyword::Reach)
+}
+
 /// What happened, for trigger checks (CR 603.2).
 #[derive(Clone, Debug)]
 enum Event {
@@ -1447,7 +1454,12 @@ impl Game {
             }
             Effect::Exile { target } => {
                 if let Some(id) = self.target_obj(r, *target) {
-                    self.leave_battlefield_to(id, Zone::Exile);
+                    // A card in a graveyard is simply moved; a permanent leaves the battlefield.
+                    if self.object(id).is_some_and(|o| o.zone == Zone::Graveyard) {
+                        self.move_object(id, Zone::Exile, None);
+                    } else {
+                        self.leave_battlefield_to(id, Zone::Exile);
+                    }
                 }
             }
             Effect::ReturnToHand { target } => {
@@ -2148,11 +2160,10 @@ impl Game {
             if !self.combat.attackers.iter().any(|(x, d)| x == a && *d == p) {
                 return illegal("you can only block creatures attacking you");
             }
-            let ac = view.get(*a).unwrap();
-            if ac.has_keyword(Keyword::Flying)
-                && !bc.has_keyword(Keyword::Flying)
-                && !bc.has_keyword(Keyword::Reach)
-            {
+            let Some(ac) = view.get(*a) else {
+                return illegal("no such attacker");
+            };
+            if !evasion_allows_block(ac, bc) {
                 return illegal(
                     "creatures with flying can only be blocked by flying or reach (702.9b)",
                 );
@@ -2173,6 +2184,21 @@ impl Game {
         self.version += 1;
         self.stage = Stage::Blockers(std::mem::take(&mut self.pending_blockers));
         Ok(())
+    }
+
+    /// The attackers `blocker` could legally be declared as blocking for player `p`, taken
+    /// one block at a time (menace is checked on the whole declaration).
+    pub fn blockable_attackers(&self, p: PlayerId, blocker: ObjectId) -> Vec<ObjectId> {
+        let view = self.view();
+        let Some(bc) = view.get(blocker) else {
+            return vec![];
+        };
+        self.combat
+            .attackers
+            .iter()
+            .filter(|(a, d)| *d == p && view.get(*a).is_some_and(|ac| evasion_allows_block(ac, bc)))
+            .map(|(a, _)| *a)
+            .collect()
     }
 
     fn combat_creatures(&self) -> Vec<ObjectId> {

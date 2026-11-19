@@ -133,6 +133,8 @@ export interface Hints {
   activatable: [number, number][];
   attackers: number[];
   blockers: number[];
+  /** For each of your possible blockers, the attackers it may block. */
+  block_options?: [number, number[]][];
   cast_targets: Record<string, Target[][]>;
   ability_targets: Record<string, Target[][]>;
   triggers: TriggerChoiceView[];

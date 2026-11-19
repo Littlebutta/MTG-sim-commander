@@ -215,9 +215,35 @@ fn parse_ability_line(line: &str) -> Option<Vec<Ability>> {
 }
 
 fn parse_keyword_line(line: &str) -> Option<Vec<Ability>> {
-    let parts: Vec<&str> = line.trim_end_matches('.').split(", ").collect();
-    let ks: Option<Vec<Keyword>> = parts.iter().map(|p| Keyword::parse(p)).collect();
-    ks.map(|v| v.into_iter().map(Ability::Keyword).collect())
+    let parts: Vec<&str> = line
+        .trim_end_matches('.')
+        .split([',', ';'])
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    let known: Vec<Option<Keyword>> = parts.iter().map(|p| Keyword::parse(p)).collect();
+    if known.iter().all(Option::is_some) {
+        return Some(known.into_iter().flatten().map(Ability::Keyword).collect());
+    }
+    // A keyword list with one we don't know ("Flying, ward {2}"): keep the ones we do, so the
+    // creature doesn't lose flying along with the rest, and flag only the unknown part.
+    let listlike = known.iter().any(Option::is_some)
+        && parts
+            .iter()
+            .all(|p| p.split_whitespace().count() <= 4 && !p.contains('~') && !p.contains(':'));
+    if !listlike {
+        return None;
+    }
+    Some(
+        parts
+            .iter()
+            .zip(known)
+            .map(|(p, k)| match k {
+                Some(k) => Ability::Keyword(k),
+                None => Ability::Unsupported(capitalize(p)),
+            })
+            .collect(),
+    )
 }
 
 fn parse_cost(s: &str) -> Option<Cost> {
@@ -356,9 +382,6 @@ fn target_spec(phrase: &str) -> Option<TargetSpec> {
             ..Default::default()
         }),
         "target spell" => TargetSpec::Spell(Filter::default()),
-        "target creature card from your graveyard" => {
-            TargetSpec::CardInGraveyard(Filter::creatures().yours())
-        }
         "target creature spell" => TargetSpec::Spell(Filter::creatures()),
         "target noncreature spell" => TargetSpec::Spell(Filter {
             not_types: vec![CardType::Creature],
@@ -370,8 +393,61 @@ fn target_spec(phrase: &str) -> Option<TargetSpec> {
         "target artifact or creature" => {
             TargetSpec::Permanent(f(&[CardType::Artifact, CardType::Creature]))
         }
-        _ => return creature_with_qualities(phrase),
+        _ => return graveyard_card(phrase).or_else(|| creature_with_qualities(phrase)),
     })
+}
+
+/// "target creature card from your graveyard", "target card from a graveyard", "target
+/// instant or sorcery card in an opponent's graveyard".
+fn graveyard_card(phrase: &str) -> Option<TargetSpec> {
+    let rest = phrase.strip_prefix("target ")?;
+    let (kind, whose) = rest
+        .split_once(" card from ")
+        .or_else(|| rest.split_once(" card in "))
+        .or_else(|| rest.strip_prefix("card from ").map(|w| ("", w)))
+        .or_else(|| rest.strip_prefix("card in ").map(|w| ("", w)))?;
+    let mut f = match kind {
+        "" => Filter::default(),
+        "creature" => Filter::creatures(),
+        "artifact" => Filter::of_type(CardType::Artifact),
+        "enchantment" => Filter::of_type(CardType::Enchantment),
+        "instant" => Filter::of_type(CardType::Instant),
+        "sorcery" => Filter::of_type(CardType::Sorcery),
+        "land" => Filter::of_type(CardType::Land),
+        "planeswalker" => Filter::of_type(CardType::Planeswalker),
+        "instant or sorcery" => Filter {
+            any_of_types: vec![CardType::Instant, CardType::Sorcery],
+            ..Default::default()
+        },
+        "artifact or creature" => Filter {
+            any_of_types: vec![CardType::Artifact, CardType::Creature],
+            ..Default::default()
+        },
+        "artifact or enchantment" => Filter {
+            any_of_types: vec![CardType::Artifact, CardType::Enchantment],
+            ..Default::default()
+        },
+        "permanent" => Filter {
+            not_types: vec![CardType::Instant, CardType::Sorcery],
+            ..Default::default()
+        },
+        "noncreature" => Filter {
+            not_types: vec![CardType::Creature],
+            ..Default::default()
+        },
+        "nonland" => Filter {
+            not_types: vec![CardType::Land],
+            ..Default::default()
+        },
+        _ => return None,
+    };
+    match whose {
+        "your graveyard" => f.controller = Some(PlayerRef::You),
+        "an opponent's graveyard" => f.controller = Some(PlayerRef::Opponents),
+        "a graveyard" | "any graveyard" | "a single graveyard" => {}
+        _ => return None,
+    }
+    Some(TargetSpec::CardInGraveyard(f))
 }
 
 /// "target nonblack creature", "target creature with flying", "target white creature".
@@ -652,6 +728,14 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
         });
     }
     if let Some(rest) = s.strip_prefix("return ") {
+        if let Some(t) = rest
+            .strip_suffix(" to its owner's hand")
+            .filter(|t| t.contains("graveyard"))
+        {
+            return Some(Effect::ReturnFromGraveyardToHand {
+                target: push_target(targets, t)?,
+            });
+        }
         if let Some(t) = rest.strip_suffix(" to its owner's hand") {
             return Some(Effect::ReturnToHand {
                 target: push_target(targets, t)?,
@@ -662,7 +746,21 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
                 target: push_target(targets, t)?,
             });
         }
-        if let Some(t) = rest.strip_suffix(" to the battlefield") {
+        if let Some(t) = rest
+            .strip_suffix(" to the battlefield under your control")
+            .or_else(|| rest.strip_suffix(" to the battlefield"))
+        {
+            return Some(Effect::ReturnFromGraveyardToBattlefield {
+                target: push_target(targets, t)?,
+            });
+        }
+    }
+    // "put target creature card from a graveyard onto the battlefield under your control"
+    if let Some(t) = s.strip_prefix("put ").and_then(|r| {
+        r.strip_suffix(" onto the battlefield under your control")
+            .or_else(|| r.strip_suffix(" onto the battlefield"))
+    }) {
+        if t.contains("graveyard") {
             return Some(Effect::ReturnFromGraveyardToBattlefield {
                 target: push_target(targets, t)?,
             });
@@ -844,6 +942,42 @@ mod tests {
         assert!(
             matches!(&d.abilities[0], Ability::Mana { produces: ManaProduction::OneOf(v), .. } if v.len() == 2)
         );
+    }
+
+    #[test]
+    fn graveyard_targets() {
+        for (text, mine) in [
+            ("Return target creature card from your graveyard to your hand.", true),
+            ("Return target card from your graveyard to your hand.", true),
+            ("Return target artifact card from your graveyard to the battlefield.", true),
+            ("Put target creature card from a graveyard onto the battlefield under your control.", false),
+            ("Exile target card from a graveyard.", false),
+            ("Exile target creature card from an opponent's graveyard.", false),
+            ("Return target instant or sorcery card from your graveyard to your hand.", true),
+        ] {
+            let d = def("Test Rite", &[CardType::Sorcery], text);
+            assert!(d.fully_supported(), "{text}");
+            assert!(
+                matches!(&d.spell_targets[0], TargetSpec::CardInGraveyard(f) if (f.controller == Some(PlayerRef::You)) == mine),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_keyword_list_with_an_unknown_keyword_keeps_the_known_ones() {
+        for text in [
+            "Flying, ward {2}",
+            "Flying; protection from red",
+            "Flying, first strike, prowess",
+        ] {
+            let d = def("Test Drake", &[CardType::Creature], text);
+            assert!(
+                d.abilities.contains(&Ability::Keyword(Keyword::Flying)),
+                "{text}"
+            );
+            assert!(!d.fully_supported(), "{text}");
+        }
     }
 
     #[test]

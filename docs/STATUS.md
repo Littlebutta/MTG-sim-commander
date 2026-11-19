@@ -29,6 +29,7 @@ Known gaps (planned):
 
 - MTGJSON `AtomicCards` import (multi-face cards, color identity, commander legality, leadership skills).
 - Update check against MTGJSON `Meta.json` (download happens in the app).
+- A keyword list with a keyword the game doesn't know yet ("Flying, ward {2}") keeps the ones it does, so such creatures no longer lose flying.
 - Oracle-text parser for keywords, mana abilities, common triggers, anthems and common spell effects, including compound sentences ("draw a card and gain 2 life"), player effects for you/each opponent/target player, until-end-of-turn pumps for groups and targets, and qualified targets (nonblack creature, creature with flying, creature spell). Every built-in card (234) is fully supported. Coverage of the whole MTGJSON pool can't be measured from the build machine yet.
 - Commander is singleton: decks with more than one copy of a card can't be played, except basics and cards that say otherwise ("any number", "up to seven cards named").
 - Decklist import (Moxfield/Archidekt/MTGO text, `*CMDR*`) and validation: size, singleton, color identity, commander eligibility, partner/background pairs, banned list, unsupported-card report.
@@ -53,6 +54,10 @@ Known gaps (planned):
 - The whole interface is laid out at 1600x900 and scaled to the window (`app/src/scale.ts`), so 4K and 32:9 ultrawide windows get the same proportions with extra room at the sides.
 - Your side of the table has nine places for cards (front, middle and back rows, each with left, center and right); drag a permanent to move it, and every place lights up while you drag.
 - When your commander goes to a graveyard, exile, your hand or your library, you're asked whether to leave it there or move it to the command zone (903.9a-b). Computer players always take it back. For hand and library the question comes right after the move rather than as a replacement.
+- Blocking: the table only lets a blocker be dropped on attackers it may legally block and says why not (flying). Declared blocks show as arrows with "blocks X" / "blocked by Y" labels and a violet outline; unblocked attackers say so.
+- Opponents' hand sizes show as a fan of cards with the count, next to their life.
+- Graveyards: hover a graveyard to look through it, click to keep it open. It opens by itself when a spell or ability can target a card in one (Raise Dead, Gravedigger), with the legal cards glowing.
+- The hover preview stays near the middle of the table on ultrawide screens.
 - Game setup: your deck, 1 to 3 computer opponents, each with a deck (or a random built-in one) and a play style.
 
 ## Computer players (`client-api/src/ai`)
