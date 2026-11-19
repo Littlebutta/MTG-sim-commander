@@ -118,6 +118,8 @@ export interface SearchQuery {
   identity?: string | null;
   types?: string[];
   commanders_only?: boolean;
+  /** Include cards banned in Commander. */
+  include_banned?: boolean;
   max_mv?: number | null;
   limit?: number;
 }

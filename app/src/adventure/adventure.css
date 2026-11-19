@@ -274,15 +274,87 @@
 .adv-dialogue-text { font-size: clamp(18px, 1.35vw, 24px); line-height: 1.5; color: var(--ink); }
 .adv-muted { color: var(--ink-soft); }
 
-/* ---- the spellbook: the main deck builder, full screen, in the table's own colors */
+/* ---- the spellbook: the main deck builder, full screen, dressed as a parchment journal like the rest
+   of the adventure. Dark ink on light paper; hover cards and the card window are paper too. */
 .adv-builder {
-  position: fixed; inset: 0; z-index: 60; background: var(--bg-0); color: var(--text); font: 14px/1.4 var(--sans);
-  display: flex; flex-direction: column;
+  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; padding: 18px;
+  background: rgba(10, 6, 14, 0.72); font: 15px/1.4 var(--pixel);
+  --bg-0: var(--paper); --bg-1: var(--paper-2); --bg-2: var(--paper-3);
+  --text: var(--ink); --muted: #5a4632; --line: rgba(58, 39, 22, 0.28);
+  --turn: var(--gold); --accent: var(--gold); --accent-2: #8a5a12; --good: #2f7a3e; --danger: #b23a2a;
+  --serif: var(--pixel); --sans: var(--pixel);
+  color: var(--ink);
 }
-.adv-builder .builder-screen { flex: 1; min-height: 0; }
-.adv-build-status { margin: 6px 0 2px; padding: 8px 10px; border-radius: 8px; font-size: 13px; border: 1px solid var(--line); }
-.adv-build-status.ok { background: rgba(89, 217, 142, 0.1); border-color: rgba(89, 217, 142, 0.4); color: var(--text); }
-.adv-build-status.bad { background: rgba(255, 77, 94, 0.1); border-color: rgba(255, 77, 94, 0.45); color: var(--text); }
+.adv-builder .builder-screen {
+  flex: 1; min-height: 0; height: auto; background: var(--paper); color: var(--ink);
+  border: 4px solid var(--frame); box-shadow: inset 0 0 0 4px var(--paper-2), 0 0 0 4px var(--paper-3), 0 14px 0 4px rgba(0, 0, 0, 0.4);
+}
+.adv-builder .screen-head { background: var(--paper-2); border-bottom: 3px solid var(--frame); }
+.adv-builder .screen-head h2 { font: 600 24px var(--pixel); letter-spacing: 0.02em; color: var(--ink); }
+.adv-builder .b-col { border-right: 3px solid var(--paper-3); }
+.adv-builder .menu-label { font: 600 13px var(--pixel); letter-spacing: 0.08em; color: #5a4632; }
+
+/* buttons, chips and fields look like the journal's */
+.adv-builder .btn, .adv-builder .ghost {
+  font: 600 15px var(--pixel); color: var(--ink); background: var(--paper-2); border: 3px solid var(--frame);
+  border-radius: 0; box-shadow: 0 3px 0 var(--frame);
+}
+.adv-builder .btn:hover:not(:disabled), .adv-builder .ghost:hover { background: var(--paper); color: var(--ink); }
+.adv-builder .btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--frame); }
+.adv-builder .btn-primary, .adv-builder .btn-primary:hover:not(:disabled) { background: var(--gold-2); color: var(--ink); }
+.adv-builder .btn-primary:hover:not(:disabled) { background: #ffd978; }
+.adv-builder .b-add, .adv-builder .b-qty { padding: 2px 9px; box-shadow: 0 2px 0 var(--frame); border-width: 2px; }
+.adv-builder .chip-btn { font: 600 13px var(--pixel); color: var(--ink); background: var(--paper-2); border: 2px solid var(--frame); border-radius: 0; }
+.adv-builder .chip-btn:hover { background: var(--paper); color: var(--ink); }
+.adv-builder .chip-btn.on { background: var(--gold-2); border-color: var(--frame); color: var(--ink); }
+.adv-builder .field, .adv-builder .deck-name, .adv-builder .deck-text {
+  font-family: var(--pixel); color: var(--ink); background: #fffaf0; border: 3px solid var(--frame); border-radius: 0;
+}
+.adv-builder .field::placeholder { color: #7a6650; }
+.adv-builder .field:focus, .adv-builder .deck-name:focus { border-color: var(--gold); }
+.adv-builder select.field option, .adv-builder select.field optgroup { background: var(--paper); color: var(--ink); }
+.adv-builder .toggle { color: var(--ink); }
+
+/* card rows */
+.adv-builder .b-row { border-radius: 0; border: 2px solid transparent; }
+.adv-builder .b-row:hover { background: var(--paper-2); border-color: var(--paper-3); }
+.adv-builder .b-row.in { opacity: 0.72; }
+/* mana symbols get an ink ring so white and colorless pips show on paper */
+.adv-builder .pip { box-shadow: 0 0 0 1.5px rgba(43, 29, 18, 0.75); color: #1a120b; }
+.adv-builder .b-name { font: 600 15px var(--pixel); color: var(--ink); }
+.adv-builder .b-type, .adv-builder .b-reason { font: 400 13px var(--pixel); color: #5a4632; opacity: 1; }
+.adv-builder .b-partial, .adv-builder .b-tip-warn { color: #9a4a10; }
+.adv-builder .b-role { font: 600 10px var(--pixel); border-radius: 0; background: var(--paper-3); color: var(--ink); }
+.adv-builder .b-check { color: var(--good); }
+.adv-builder .b-tips { color: var(--ink); }
+
+/* stats */
+.adv-builder .b-bar { color: #5a4632; }
+.adv-builder .b-bar-fill { background: var(--gold); border-radius: 0; box-shadow: inset 0 0 0 2px #8a5a12; }
+.adv-builder .b-bar-target { border-top-color: rgba(58, 39, 22, 0.5); }
+.adv-builder .b-meter-track { height: 8px; border-radius: 0; background: var(--paper-3); border: 1px solid rgba(58, 39, 22, 0.4); }
+.adv-builder .b-meter-track > span { border-radius: 0; background: #c27a1a; }
+.adv-builder .b-meter.ok .b-meter-track > span { background: var(--good); }
+
+/* hover card, card window and export: paper slips with dark ink */
+.adv-builder .b-tip, .adv-builder .b-window {
+  background: var(--paper); color: var(--ink); border: 3px solid var(--frame); border-radius: 0;
+  box-shadow: 0 0 0 3px var(--paper-3), 0 10px 0 3px rgba(0, 0, 0, 0.35);
+}
+.adv-builder .b-tip-head { font: 600 16px var(--pixel); }
+.adv-builder .b-tip-text, .adv-builder .b-window-body .preview-text { font-family: var(--pixel); font-size: 14px; color: var(--ink); }
+.adv-builder .b-window-art { border-radius: 0; border: 3px solid var(--frame); }
+.adv-builder .b-window .preview-name { font: 600 18px var(--pixel); }
+.adv-builder .b-window .preview-type { color: #5a4632; border-bottom: 2px solid var(--paper-3); }
+.adv-builder .b-window .preview-text .warn { color: #9a4a10; }
+.adv-builder .b-window-scrim { background: rgba(10, 6, 14, 0.62); }
+/* the toast stays a dark slip with light text so it stands out from the page */
+.adv-builder .toast { --text: #ece6f2; font-family: var(--pixel); }
+
+.adv-build-status { margin: 6px 0 2px; padding: 8px 10px; font-size: 14px; border: 2px solid var(--frame); color: var(--ink); }
+.adv-build-status.ok { background: #d6ecc8; }
+.adv-build-status.bad { background: #f4cdbf; }
+.adv-build-status .muted { color: #5a4632; }
 .b-owned { color: var(--accent-2); font-variant-numeric: tabular-nums; }
 
 /* ---- HUD */

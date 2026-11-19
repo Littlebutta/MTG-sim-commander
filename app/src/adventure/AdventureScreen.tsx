@@ -285,7 +285,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       "Win a duel and your opponent will usually let you take a card from their deck. That's the custom.",
       "Build your deck any way you like. No rules on the road, except one: no more than four copies of any card. Lands from the earth are free, take as many as you need.",
       "Open your journal with Esc to see your cards, and your spellbook to change your deck.",
-      "And if you ever find something truly rare, a strange root or a glowing stone, take it to Ysolde in her tower by the crossroads. Her cauldron can brew it into any spell you can name.",
+      "And if you ever find something truly rare, a strange root or a glowing stone, take it to Ysolde in her tower by the crossroads. Her cauldron can brew it into any card you can name.",
       "The touchstones out there will remember you. Touch one, and if you're ever beaten, you'll wake beside it. The one in the village square is closest.",
       "Go on, then. The road's waiting. And come back and tell me about it sometime.",
     ]);
@@ -313,8 +313,8 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         s.flags["met:ysolde"] = true;
         await sayAll(p, [
           "Oh! A visitor. Don't touch the cauldron. Well, do, but not yet.",
-          "This cauldron is very old and very hungry. Feed it something rare, a reagent, and it will brew you any spell you can name.",
-          "Any spell at all. Mind you, it only knows spells. Lands it can't make, they come from the earth.",
+          "This cauldron is very old and very hungry. Feed it something rare, a reagent, and it will brew you any card you can name.",
+          "Any card at all. Spells, creatures, artifacts, even rare lands. Every card there has ever been is in that brew somewhere.",
         ]);
       }
       if (!has) return say(p, "Come back when you've found something rare. Moonpetals, phoenix embers, that kind of thing. The old powers carry them too, I hear.");
@@ -551,6 +551,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       victory: (id: string) => worldRef.current && run(() => victory(worldRef.current!, id)),
       go: (map: string, x: number, y: number) => worldRef.current?.enter({ map, x, y, dir: "down" }),
       found: (card: string) => run(() => showFound({ card })),
+      brew: () => worldRef.current && run(() => brew(worldRef.current!)),
     };
   }
 

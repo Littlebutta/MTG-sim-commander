@@ -49,6 +49,8 @@ pub struct SearchQuery {
     /// Card types every result must have, e.g. ["Creature"].
     pub types: Vec<String>,
     pub commanders_only: bool,
+    /// Include cards banned in Commander (adventure mode's cauldron can brew anything).
+    pub include_banned: bool,
     pub max_mv: Option<u32>,
     pub limit: Option<usize>,
 }
@@ -292,7 +294,7 @@ pub fn search(pool: &[CardRecord], q: &SearchQuery) -> Vec<CardSummary> {
     let identity = q.identity.as_deref().map(parse_identity);
     let mut hits: Vec<(u8, &CardRecord)> = pool
         .iter()
-        .filter(|r| playable_in_commander(r))
+        .filter(|r| playable_in_commander(r) || (q.include_banned && !r.def.is_token))
         .filter(|r| !q.commanders_only || is_commander(r))
         .filter(|r| identity.is_none_or(|id| r.def.color_identity.is_subset_of(id)))
         .filter(|r| q.max_mv.is_none_or(|m| r.def.mana_cost.mana_value() <= m))
@@ -727,6 +729,22 @@ mod tests {
             },
         );
         assert!(!cmdrs.is_empty() && cmdrs.iter().all(|c| c.can_be_commander));
+    }
+
+    #[test]
+    fn banned_cards_only_show_when_asked_for() {
+        let mut pool = starter_cards();
+        let ring = pool.iter_mut().find(|r| r.def.name == "Sol Ring").unwrap();
+        ring.commander_legality = Some("Banned".into());
+        let q = |include_banned| SearchQuery {
+            text: "sol ring".into(),
+            include_banned,
+            ..Default::default()
+        };
+        assert!(search(&pool, &q(false))
+            .iter()
+            .all(|c| c.name != "Sol Ring"));
+        assert_eq!(search(&pool, &q(true))[0].name, "Sol Ring");
     }
 
     #[test]
