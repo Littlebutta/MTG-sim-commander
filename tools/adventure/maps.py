@@ -108,13 +108,21 @@ def cave(m, x, y, rock="R", door="e"):
     m.set(x + 1, y + 1, ":")
 
 # ------------------------------------------------------------------ overworld
-W, H = 100, 80
+# The layout below was drawn on a 100×80 grid; S spreads it out to a bigger world. Positions are
+# scaled with s(); the sizes of houses, caves and roads are not.
+S = 1.25
+def s(v):
+    return int(round(v * S))
+def sp(pts):
+    return [(s(x), s(y)) for x, y in pts]
+
+W, H = s(100), s(80)
 ow = Map("overworld", "The Vale of Elderreach", W, H, ".", "vale")
-REG = {
+REG = {k: (s(a), s(b), s(c), s(d), g) for k, (a, b, c, d, g) in {
     "high": (0, 0, 34, 28, "h"), "spire": (34, 0, 66, 28, "g"), "ember": (66, 0, 100, 28, "a"),
     "mire": (0, 28, 34, 54, "m"), "meadow": (34, 28, 66, 54, "."), "coast": (66, 28, 100, 54, "."),
     "wilds": (0, 54, 34, 80, "."), "village": (34, 54, 66, 80, "."), "lake": (66, 54, 100, 80, "."),
-}
+}.items()}
 REGION_NAMES = {
     "high": "Sunspire Highlands", "spire": "The Shattered Reach", "ember": "Emberpeak",
     "mire": "Mirefen", "meadow": "Thistle Meadow", "coast": "Tidewater Coast",
@@ -136,30 +144,30 @@ def hborder(y, x0, x1, c, gaps):
             ow.set(x, y - 1, c); ow.set(x, y, c)
             if rng.random() < 0.5: ow.set(x, y + 1 if rng.random() < 0.5 else y - 2, c)
 
-vborder(34, 0, 28, "P", [14])          # highlands | reach
-vborder(66, 0, 28, "R", [14])          # reach | ember
-vborder(34, 28, 54, "D", [41])         # mire | meadow
-vborder(66, 28, 54, "T", [41])         # meadow | coast
-vborder(34, 54, 80, "T", [67])         # wilds | village
-vborder(66, 54, 80, "T", [67])         # village | lake
-hborder(28, 0, 34, "P", [17])          # highlands / mire
-hborder(28, 34, 66, "R", [50])         # reach / meadow
-hborder(28, 66, 100, "R", [83])        # ember / coast
-hborder(54, 0, 34, "T", [17])          # mire / wilds
-hborder(54, 34, 66, "T", [50])         # meadow / village
-hborder(54, 66, 100, "T", [80])        # coast / lake
+vborder(s(34), s(0), s(28), "P", [s(14)])          # highlands | reach
+vborder(s(66), s(0), s(28), "R", [s(14)])          # reach | ember
+vborder(s(34), s(28), s(54), "D", [s(41)])         # mire | meadow
+vborder(s(66), s(28), s(54), "T", [s(41)])         # meadow | coast
+vborder(s(34), s(54), s(80), "T", [s(67)])         # wilds | village
+vborder(s(66), s(54), s(80), "T", [s(67)])         # village | lake
+hborder(s(28), s(0), s(34), "P", [s(17)])          # highlands / mire
+hborder(s(28), s(34), s(66), "R", [s(50)])         # reach / meadow
+hborder(s(28), s(66), s(100), "R", [s(83)])        # ember / coast
+hborder(s(54), s(0), s(34), "T", [s(17)])          # mire / wilds
+hborder(s(54), s(34), s(66), "T", [s(50)])         # meadow / village
+hborder(s(54), s(66), s(100), "T", [s(80)])        # coast / lake
 
 # Edges of the world.
 ow.outline(0, 0, W, H, "T", 2)
 ow.rect(0, 0, W, 2, "R")
-for x in range(2, 66):
+for x in range(2, s(66)):
     if rng.random() < 0.6: ow.set(x, 2, "R")
-ow.rect(66, 0, 100, 28, "a"); ow.outline(66, 0, 100, 28, "R", 2)
-vborder(66, 0, 28, "R", [14])
-hborder(28, 66, 100, "R", [83])
+ow.rect(s(66), 0, W, s(28), "a"); ow.outline(s(66), 0, W, s(28), "R", 2)
+vborder(s(66), 0, s(28), "R", [s(14)])
+hborder(s(28), s(66), W, "R", [s(83)])
 # The sea along the east coast and the lake shore.
-for y in range(28, 80):
-    edge = 92 + int(2 * __import__("math").sin(y / 4.0))
+for y in range(s(28), H):
+    edge = s(92) + int(2 * __import__("math").sin(y / 4.0))
     for x in range(edge - 4, edge):
         if ow.get(x, y) not in ("T", "R"): ow.set(x, y, "s")
     for x in range(edge, W):
@@ -172,169 +180,174 @@ def scatter_region(k, items):
         ow.scatter(x0 + 2, y0 + 2, x1 - 2, y1 - 2, c, chance, {g})
 
 # Highlands: pines, boulders, flowers, a cold tarn.
-ow.blob(24, 8, 3.2, "~", {"h"})
+ow.blob(s(24), s(8), 3.2 * S, "~", {"h"})
 scatter_region("high", [("P", 0.09), ("r", 0.03), (",", 0.05), ('"', 0.04)])
 # The Shattered Reach: ruined stone, crystals, broken pillars, patchy grass.
-for _ in range(14):
-    ow.blob(rng.randint(37, 63), rng.randint(4, 25), rng.uniform(1.5, 3.5), ".", {"g"})
+for _ in range(20):
+    ow.blob(rng.randint(s(37), s(63)), rng.randint(s(4), s(25)), rng.uniform(1.5, 3.5) * S, ".", {"g"})
 scatter_region("spire", [("Y", 0.025), ("Q", 0.02), ("r", 0.03)])
-ow.scatter(36, 3, 64, 26, "r", 0.02, {"."})
+ow.scatter(s(36), s(3), s(64), s(26), "r", 0.02, {"."})
 # Emberpeak: ash, lava pools, rocks, dead trees.
-for c in [(74, 8, 2.6), (90, 18, 3.0), (78, 21, 2.0), (95, 11, 1.8)]:
+for c in [(s(x), s(y), r * S) for x, y, r in [(74, 8, 2.6), (90, 18, 3.0), (78, 21, 2.0), (95, 11, 1.8)]]:
     ow.blob(*c, "L", {"a"})
 scatter_region("ember", [("R", 0.06), ("r", 0.05), ("D", 0.03)])
 # Mirefen: bog pools, dead trees, reeds (tall grass).
-for c in [(10, 40, 3.0), (24, 47, 2.6), (6, 49, 2.0), (27, 33, 2.0), (14, 32, 1.6)]:
+for c in [(s(x), s(y), r * S) for x, y, r in [(10, 40, 3.0), (24, 47, 2.6), (6, 49, 2.0), (27, 33, 2.0), (14, 32, 1.6)]]:
     ow.blob(*c, "M", {"m"})
 scatter_region("mire", [("D", 0.07), ('"', 0.12), ("r", 0.02)])
 # Thistle Meadow: open grass, flowers, tall grass, a pond.
-ow.blob(42, 34, 2.4, "~", {"."})
+ow.blob(s(42), s(34), 2.4 * S, "~", {"."})
 scatter_region("meadow", [('"', 0.10), (",", 0.06), ("T", 0.05)])
 # Tidewater: palms near the sand, rocks, tide pools.
 scatter_region("coast", [("T", 0.05), (",", 0.04), ('"', 0.06)])
-ow.scatter(68, 30, 92, 52, "r", 0.03, {"s"})
-for c in [(87, 36, 1.4), (85, 50, 1.2)]:
+ow.scatter(s(68), s(30), s(92), s(52), "r", 0.03, {"s"})
+for c in [(s(x), s(y), r * S) for x, y, r in [(87, 36, 1.4), (85, 50, 1.2)]]:
     ow.blob(*c, "~", {"s", "."})
 # Verdant Wilds: thick forest with clearings.
 scatter_region("wilds", [("T", 0.38), ('"', 0.16), (",", 0.04)])
-for c in [(10, 60, 3.0), (24, 64, 3.2), (14, 70, 3.0), (26, 74, 2.6), (8, 76, 2.4), (18, 58, 2.4)]:
+for c in [(s(x), s(y), r * S) for x, y, r in [(10, 60, 3.0), (24, 64, 3.2), (14, 70, 3.0), (26, 74, 2.6), (8, 76, 2.4), (18, 58, 2.4)]]:
     ow.blob(*c, ".", {"T", '"', ","})
-ow.blob(23, 69, 1.8, "~", {".", '"', ","})
+ow.blob(s(23), s(69), 1.8 * S, "~", {".", '"', ","})
 # Hearthmoor: tidy, a few trees and flowers.
 scatter_region("village", [(",", 0.05), ("T", 0.03)])
 # Willowmere: the lake.
-ow.blob(80, 70, 6.5, "~", {".", ","}, rough=0.8)
-ow.blob(80, 70, 7.5, "s", {"."}, rough=0.6)
+ow.blob(s(80), s(70), 6.5 * S, "~", {".", ","}, rough=0.8)
+ow.blob(s(80), s(70), 7.5 * S, "s", {"."}, rough=0.6)
 scatter_region("lake", [("T", 0.06), (",", 0.06), ('"', 0.10)])
 
 # ---- roads
-VC = (49, 66)  # village square
-ow.path([VC, (49, 41)])                       # village north to the crossroads
-ow.path([(49, 41), (17, 41), (17, 14)])       # west into the mire, north to the highlands
-ow.path([(49, 41), (83, 41), (83, 14)])       # east to the coast, north to emberpeak
-ow.path([(49, 41), (49, 12)])                 # north to the Spire
-ow.path([(17, 14), (49, 14), (83, 14)])       # the old high road across the north
-ow.path([VC, (17, 66)])                       # west into the wilds
-ow.path([VC, (78, 66), (78, 60)])             # east to Willowmere
-ow.path([(17, 41), (17, 66)])                 # mire down to the wilds
-ow.path([(80, 41), (80, 54), (80, 60)])       # coast down to the lake
+VC = (s(49), s(66))  # village square
+ow.path([VC, (s(49), s(41))])                       # village north to the crossroads
+ow.path([(s(49), s(41)), (s(17), s(41)), (s(17), s(14))])       # west into the mire, north to the highlands
+ow.path([(s(49), s(41)), (s(83), s(41)), (s(83), s(14))])       # east to the coast, north to emberpeak
+ow.path([(s(49), s(41)), (s(49), s(12))])                 # north to the Spire
+ow.path([(s(17), s(14)), (s(49), s(14)), (s(83), s(14))])       # the old high road across the north
+ow.path([VC, (s(17), s(66))])                       # west into the wilds
+ow.path([VC, (s(78), s(66)), (s(78), s(60))])             # east to Willowmere
+ow.path([(s(17), s(41)), (s(17), s(66))])                 # mire down to the wilds
+ow.path([(s(80), s(41)), (s(80), s(54)), (s(80), s(60))])       # coast down to the lake
 # Wooden bridges where roads cross water.
 for y in range(H):
     for x in range(W):
         pass
 
 # ---- Hearthmoor
-ow.rect(38, 57, 63, 77, ".")
-ow.path([VC, (49, 41)])
-ow.path([VC, (17, 66)])
-ow.path([VC, (78, 66)])
-ow.path([(40, 70), (60, 70)])
-ow.path([(44, 60), (44, 66)], width=1)
-ow.path([(56, 60), (56, 66)], width=1)
-shop_door = house(ow, 40, 56, 9, roof="O", roof_rows=3, wall_rows=2, sign="Bram's Curios — cards bought, sold and treasured.")
-inn_door = house(ow, 53, 56, 8, roof="U", roof_rows=3, wall_rows=2, sign="The Sleeping Fox — rest your feet.")
-houseA = house(ow, 38, 72, 6, roof="G")
-houseB = house(ow, 56, 72, 6, roof="O")
-ow.obj("waystone", 47, 69, id="hearthmoor")
-ow.rect(51, 67, 53, 69, ".")
-ow.obj("well", 52, 68)
-for x in range(38, 63):
-    if ow.get(x, 77) == ".": ow.set(x, 77, "#")
-for (fx, fy) in [(39, 63), (40, 63), (60, 63), (61, 63), (42, 76), (58, 76)]:
+ow.rect(s(38), s(57), s(63), s(77), ".")
+ow.path([VC, (s(49), s(41))])
+ow.path([VC, (s(17), s(66))])
+ow.path([VC, (s(78), s(66))])
+ow.path([(s(40), s(70)), (s(60), s(70))])
+shop_door = house(ow, s(40), s(56), 9, roof="O", roof_rows=3, wall_rows=2, sign="Bram's Curios — cards bought, sold and treasured.")
+inn_door = house(ow, s(53), s(56), 8, roof="U", roof_rows=3, wall_rows=2, sign="The Sleeping Fox — rest your feet.")
+houseA = house(ow, s(38), s(72), 6, roof="G")
+houseB = house(ow, s(56), s(72), 6, roof="O")
+for door in (shop_door, inn_door):
+    ow.path([(door[0], door[1] + 1), (door[0], s(66))], width=1)
+ow.obj("waystone", s(47), s(69), id="hearthmoor")
+ow.rect(s(51), s(67), s(51) + 2, s(67) + 2, ".")
+ow.obj("well", s(51) + 1, s(67) + 1)
+for x in range(s(38), s(63)):
+    if ow.get(x, s(77)) == ".": ow.set(x, s(77), "#")
+for (fx, fy) in sp([(39, 63), (40, 63), (60, 63), (61, 63), (42, 76), (58, 76)]):
     ow.set(fx, fy, ",")
-ow.obj("sign", 47, 54, text="North: Thistle Meadow and the crossroads.\nThe road splits for Mirefen, the coast and the ruins of the Reach.")
+ow.obj("sign", s(47), s(54), text="North: Thistle Meadow and the crossroads.\nThe road splits for Mirefen, the coast and the ruins of the Reach.")
 
 # ---- wizard's tower in Thistle Meadow
-ow.rect(55, 31, 62, 39, ".")
-tower_door = house(ow, 56, 31, 4, roof="J", roof_rows=3, wall_rows=3)
-ow.path([(49, 39), (58, 39)], width=1)
-ow.obj("sign", 56, 39, text="Ysolde's Tower.\nKnock loudly. Do not touch the cauldron.")
+ow.rect(s(55), s(31), s(62), s(39), ".")
+tower_door = house(ow, s(56), s(31), 4, roof="J", roof_rows=3, wall_rows=3)
+ow.path([(s(49), s(39)), (tower_door[0], s(39)), (tower_door[0], tower_door[1] + 1)], width=1)
+ow.obj("sign", tower_door[0] - 2, s(39), text="Ysolde's Tower.\nKnock loudly. Do not touch the cauldron.")
 
-# ---- dungeon entrances
-cave(ow, 8, 34, "R", "e")        # Hollow Barrow (mire)
-ow.path([(17, 38), (8, 38), (8, 35)], width=1)
-cave(ow, 8, 7, "R", "E")         # Gilded Sanctum (highlands)
-ow.path([(17, 12), (8, 12), (8, 8)], width=1)
-cave(ow, 92, 7, "R", "e")        # Cinder Depths (emberpeak)
-ow.path([(84, 12), (92, 12), (92, 8)], width=1)
-cave(ow, 89, 32, "R", "e")       # Drowned Grotto (coast)
-ow.path([(84, 38), (89, 38), (89, 33)], width=1)
-cave(ow, 7, 75, "T", "e")        # Thornheart Hollow (wilds)
-ow.path([(17, 72), (7, 72), (7, 76)], width=1)
-ow.set(7, 75, "e"); ow.set(7, 76, ":")
+# ---- dungeon entrances: a rock face with a short path out to the nearest road
+CAVES = {}
+for did, cx, cy, rock, door, path in [
+    ("barrow", 8, 34, "R", "e", [(17, 38), (8, 38)]),
+    ("sanctum", 8, 7, "R", "E", [(17, 12), (8, 12)]),
+    ("cinder", 92, 7, "R", "e", [(84, 12), (92, 12)]),
+    ("grotto", 89, 32, "R", "e", [(84, 38), (89, 38)]),
+    ("hollow", 7, 75, "T", "e", [(17, 72), (7, 72)]),
+]:
+    x, y = s(cx), s(cy)
+    cave(ow, x, y, rock, door)
+    ow.path(sp(path) + [(x, y + 1)], width=1)
+    ow.set(x, y, door)
+    CAVES[did] = (x, y)
 
 # ---- the Spire
-ow.rect(43, 3, 57, 12, "g")
-for yy in range(3, 9):
-    for xx in range(46, 54):
-        ow.set(xx, yy, "Z" if yy < 8 else "Z")
-ow.set(49, 8, "E"); ow.set(50, 8, "Z")
-ow.set(49, 9, "g"); ow.set(48, 9, "g"); ow.set(50, 9, "g")
-ow.obj("gate", 49, 9, id="spire")
-ow.obj("waystone", 52, 11, id="reach")
+SPIRE = (s(49), s(8) + 1)   # the Spire's door
+ow.rect(s(43), s(3), s(57), s(12) + 1, "g")
+for yy in range(s(3), SPIRE[1] + 1):
+    for xx in range(SPIRE[0] - 4, SPIRE[0] + 5):
+        ow.set(xx, yy, "Z")
+ow.set(*SPIRE, "E")
+for xx in (SPIRE[0] - 1, SPIRE[0], SPIRE[0] + 1):
+    ow.set(xx, SPIRE[1] + 1, "g")
+ow.path([(s(49), s(14)), (SPIRE[0], SPIRE[1] + 2)])
+ow.obj("gate", SPIRE[0], SPIRE[1] + 1, id="spire")
+ow.obj("waystone", SPIRE[0] + 4, SPIRE[1] + 3, id="reach")
 
 # ---- waystones
-for wid, x, y in [("mirefen", 19, 43), ("highlands", 19, 16), ("emberpeak", 81, 16), ("tidewater", 81, 43),
-                  ("wilds", 19, 64), ("willowmere", 76, 62)]:
+for wid, x, y in [("mirefen", s(19), s(43)), ("highlands", s(19), s(16)), ("emberpeak", s(81), s(16)), ("tidewater", s(81), s(43)),
+                  ("wilds", s(19), s(64)), ("willowmere", s(76), s(62))]:
     ow.obj("waystone", x, y, id=wid)
 
 # ---- signs at the borders
 for x, y, text in [
-    (31, 43, "West: Mirefen. Mind the bogs, and the folk who live in them."),
-    (68, 43, "East: Tidewater Coast."),
-    (19, 30, "North: the Sunspire Highlands."),
-    (85, 30, "North: Emberpeak. The ground is warm. Then it is very warm."),
-    (51, 30, "North: the Shattered Reach and the Rift Spire.\nNo one who climbed it remembers why they went."),
-    (31, 68, "West: the Verdant Wilds. Stay on the path."),
-    (68, 68, "East: Willowmere."),
-    (10, 39, "Hollow Barrow.\nThe dead are resting. Please do the same."),
-    (10, 13, "The Gilded Sanctum. Pilgrims welcome; doubters tolerated."),
-    (90, 13, "The Cinder Depths. Turn back."),
-    (87, 39, "The Drowned Grotto. Low tide only."),
-    (9, 72, "Thornheart Hollow."),
+    (s(31), s(43), "West: Mirefen. Mind the bogs, and the folk who live in them."),
+    (s(68), s(43), "East: Tidewater Coast."),
+    (s(19), s(30), "North: the Sunspire Highlands."),
+    (s(85), s(30), "North: Emberpeak. The ground is warm. Then it is very warm."),
+    (s(51), s(30), "North: the Shattered Reach and the Rift Spire.\nNo one who climbed it remembers why they went."),
+    (s(31), s(68), "West: the Verdant Wilds. Stay on the path."),
+    (s(68), s(68), "East: Willowmere."),
+    (s(10), s(39), "Hollow Barrow.\nThe dead are resting. Please do the same."),
+    (s(10), s(13), "The Gilded Sanctum. Pilgrims welcome; doubters tolerated."),
+    (s(90), s(13), "The Cinder Depths. Turn back."),
+    (s(87), s(39), "The Drowned Grotto. Low tide only."),
+    (s(9), s(72), "Thornheart Hollow."),
 ]:
     ow.obj("sign", x, y, text=text)
 
 # ---- duelists on the overworld (facing, sight range)
 DUELISTS_OW = [
-    ("rowan", 47, 47, "down", 4), ("tam", 52, 36, "left", 4),
-    ("pip", 75, 64, "left", 3), ("ida", 88, 63, "down", 3), ("nell", 72, 69, "right", 3),
-    ("mosswick", 22, 41, "down", 4), ("vey", 14, 46, "right", 4), ("gil", 19, 33, "left", 3),
-    ("edda", 17, 21, "right", 4), ("calix", 26, 14, "down", 3), ("lune", 12, 18, "right", 4),
-    ("brakka", 85, 21, "left", 4), ("snag", 76, 14, "down", 3), ("kessa", 89, 15, "left", 3),
-    ("quill", 74, 41, "down", 4), ("brine", 86, 45, "left", 4), ("ivo", 83, 34, "right", 3),
-    ("thorne", 24, 66, "up", 4), ("kip", 13, 61, "right", 3), ("oakhart", 17, 70, "left", 3),
-    ("gearlock", 44, 18, "right", 4), ("sentinel", 51, 20, "left", 3),
+    ("rowan", s(47), s(47), "down", 4), ("tam", s(52), s(36), "left", 4),
+    ("pip", s(75), s(64), "left", 3), ("ida", s(88), s(63), "down", 3), ("nell", s(72), s(69), "right", 3),
+    ("mosswick", s(22), s(41), "down", 4), ("vey", s(14), s(46), "right", 4), ("gil", s(19), s(33), "left", 3),
+    ("edda", s(17), s(21), "right", 4), ("calix", s(26), s(14), "down", 3), ("lune", s(12), s(18), "right", 4),
+    ("brakka", s(85), s(21), "left", 4), ("snag", s(76), s(14), "down", 3), ("kessa", s(89), s(15), "left", 3),
+    ("quill", s(74), s(41), "down", 4), ("brine", s(86), s(45), "left", 4), ("ivo", s(83), s(34), "right", 3),
+    ("thorne", s(24), s(66), "up", 4), ("kip", s(13), s(61), "right", 3), ("oakhart", s(17), s(70), "left", 3),
+    ("gearlock", s(44), s(18), "right", 4), ("sentinel", s(51), s(20), "left", 3),
 ]
 for nid, x, y, d, sight in DUELISTS_OW:
     ow.obj("npc", x, y, id=nid, dir=d, sight=sight)
 
 # ---- townsfolk
 TOWNS = [
-    ("mira", 45, 67, "down"), ("old_tom", 58, 69, "left"), ("kid_ash", 41, 69, "right"),
-    ("guard_hal", 49, 56, "down"), ("fisher_wen", 79, 61, "down"), ("pilgrim", 20, 24, "down"),
-    ("smith", 80, 24, "left"), ("hermit", 28, 50, "left"), ("scholar", 40, 22, "right"),
-    ("sailor", 87, 41, "left"),
+    ("mira", s(45), s(67), "down"), ("old_tom", s(58), s(69), "left"), ("kid_ash", s(41), s(69), "right"),
+    ("guard_hal", s(49), s(56), "down"), ("fisher_wen", s(79), s(61), "down"), ("pilgrim", s(20), s(24), "down"),
+    ("smith", s(80), s(24), "left"), ("hermit", s(28), s(50), "left"), ("scholar", s(40), s(22), "right"),
+    ("sailor", s(87), s(41), "left"),
 ]
 for nid, x, y, d in TOWNS:
     ow.obj("npc", x, y, id=nid, dir=d, sight=0)
 
 # ---- lost cards (visible) and hidden ones (in grass, glinting now and then)
 LOST = {
-    "meadow": [(38, 32), (60, 46), (45, 50), (63, 30)],
-    "village": [(62, 59), (36, 75)],
-    "lake": [(70, 76), (95, 60), (72, 57), (90, 76)],
-    "mire": [(4, 44), (29, 36), (12, 52), (30, 48)],
-    "high": [(4, 22), (29, 4), (22, 25), (31, 19)],
-    "ember": [(70, 4), (96, 24), (88, 3), (72, 25)],
-    "coast": [(70, 31), (90, 52), (77, 50), (71, 47)],
-    "wilds": [(4, 58), (30, 77), (12, 66), (29, 58)],
-    "spire": [(38, 5), (62, 24), (60, 6)],
+    "meadow": [(s(38), s(32)), (s(60), s(46)), (s(45), s(50)), (s(63), s(30))],
+    "village": [(s(62), s(59)), (s(36), s(75))],
+    "lake": [(s(70), s(76)), (s(95), s(60)), (s(72), s(57)), (s(90), s(76))],
+    "mire": [(s(4), s(44)), (s(29), s(36)), (s(12), s(52)), (s(30), s(48))],
+    "high": [(s(4), s(22)), (s(29), s(4)), (s(22), s(25)), (s(31), s(19))],
+    "ember": [(s(70), s(4)), (s(96), s(24)), (s(88), s(3)), (s(72), s(25))],
+    "coast": [(s(70), s(31)), (s(90), s(52)), (s(77), s(50)), (s(71), s(47))],
+    "wilds": [(s(4), s(58)), (s(30), s(77)), (s(12), s(66)), (s(29), s(58))],
+    "spire": [(s(38), s(5)), (s(62), s(24)), (s(60), s(6))],
 }
 HIDDEN = {
-    "meadow": [(40, 44), (58, 50), (36, 37)], "lake": [(85, 61), (68, 73)], "mire": [(7, 30), (25, 51), (20, 37)],
-    "high": [(5, 15), (27, 22)], "ember": [(95, 4), (70, 18)], "coast": [(78, 35), (73, 52)],
-    "wilds": [(4, 70), (21, 76), (31, 62)], "spire": [(36, 25), (63, 13)], "village": [(64, 77)],
+    "meadow": [(s(40), s(44)), (s(58), s(50)), (s(36), s(37))], "lake": [(s(85), s(61)), (s(68), s(73))], "mire": [(s(7), s(30)), (s(25), s(51)), (s(20), s(37))],
+    "high": [(s(5), s(15)), (s(27), s(22))], "ember": [(s(95), s(4)), (s(70), s(18))], "coast": [(s(78), s(35)), (s(73), s(52))],
+    "wilds": [(s(4), s(70)), (s(21), s(76)), (s(31), s(62))], "spire": [(s(36), s(25)), (s(63), s(13))], "village": [(s(64), s(77))],
 }
 n = 0
 for region, spots in LOST.items():
@@ -349,8 +362,8 @@ for region, spots in HIDDEN.items():
             ow.set(x, y, '"')
 
 # ---- rare reagents out in the world
-for rid, x, y in [("moonpetal", 4, 4), ("phoenix_ember", 97, 2), ("leviathan_pearl", 95, 30),
-                  ("mandrake", 3, 63), ("starfall_shard", 63, 3), ("sunstone", 30, 2)]:
+for rid, x, y in [("moonpetal", s(4), s(4)), ("phoenix_ember", s(97), s(2)), ("leviathan_pearl", s(95), s(30)),
+                  ("mandrake", s(3), s(63)), ("starfall_shard", s(63), s(3)), ("sunstone", s(30), s(2))]:
     ow.obj("reagent", x, y, id=rid)
 
 # Doors.
@@ -462,13 +475,14 @@ def dungeon(mid, name, theme, entrance, acolytes, boss, chest_reagent, card_spot
     return m
 
 DUNGEONS = [
-    dungeon("barrow", "Hollow Barrow", "barrow", (8, 34), [("morrow", "right"), ("hob", "down")], "vesper", "grave_lily", [(4, 20), (26, 16), (21, 9)]),
-    dungeon("sanctum", "The Gilded Sanctum", "sanctum", (8, 7), [("osric", "right"), ("maelis", "down")], "aurelia", "seraph_feather", [(4, 20), (26, 16), (21, 9)]),
-    dungeon("cinder", "The Cinder Depths", "cinder", (92, 7), [("fizz", "right"), ("sora", "down")], "pyrrhus", "wyrm_scale", [(4, 20), (26, 16), (21, 9)]),
-    dungeon("grotto", "The Drowned Grotto", "grotto", (89, 32), [("ambrose", "right"), ("sela", "down")], "oshara", "tide_glass", [(4, 20), (26, 16), (21, 9)]),
-    dungeon("hollow", "Thornheart Hollow", "hollow", (7, 75), [("bramblebeard", "right"), ("fenna", "down")], "thornfather", "heartwood", [(4, 20), (26, 16), (21, 9)]),
+    dungeon("barrow", "Hollow Barrow", "barrow", CAVES["barrow"], [("morrow", "right"), ("hob", "down")], "vesper", "grave_lily", [(4, 20), (26, 16), (21, 9)]),
+    dungeon("sanctum", "The Gilded Sanctum", "sanctum", CAVES["sanctum"], [("osric", "right"), ("maelis", "down")], "aurelia", "seraph_feather", [(4, 20), (26, 16), (21, 9)]),
+    dungeon("cinder", "The Cinder Depths", "cinder", CAVES["cinder"], [("fizz", "right"), ("sora", "down")], "pyrrhus", "wyrm_scale", [(4, 20), (26, 16), (21, 9)]),
+    dungeon("grotto", "The Drowned Grotto", "grotto", CAVES["grotto"], [("ambrose", "right"), ("sela", "down")], "oshara", "tide_glass", [(4, 20), (26, 16), (21, 9)]),
+    dungeon("hollow", "Thornheart Hollow", "hollow", CAVES["hollow"], [("bramblebeard", "right"), ("fenna", "down")], "thornfather", "heartwood", [(4, 20), (26, 16), (21, 9)]),
 ]
-for d, (ex, ey) in zip(DUNGEONS, [(8, 34), (8, 7), (92, 7), (89, 32), (7, 75)]):
+for d in DUNGEONS:
+    ex, ey = CAVES[d.id]
     warp(ow, ex, ey, d.id, 15, 24, "up")
 
 # Theme touches.
@@ -486,9 +500,9 @@ sp1.set(8, 15, "p"); sp1.set(8, 16, "W")
 sp1.set(8, 14, "x")
 sp1.set(8, 2, "u")
 sp1.obj("npc", 8, 3, id="regent", dir="down", sight=0)
-warp(sp1, 8, 14, "overworld", 49, 9, "down")
+warp(sp1, 8, 14, "overworld", SPIRE[0], SPIRE[1] + 2, "down")
 warp(sp1, 8, 2, "spire2", 8, 13, "up")
-warp(ow, 49, 8, "spire1", 8, 13, "up")
+warp(ow, SPIRE[0], SPIRE[1], "spire1", 8, 13, "up")
 sp1.obj("waystone", 5, 13, id="spire")
 
 sp2 = Map("spire2", "The Rift Spire — the Hall of Forgetting", 17, 17, "W", "rift")
@@ -561,7 +575,7 @@ for m in MAPS:
         if o["kind"] in ("npc", "card", "reagent", "sign", "waystone", "gate", "well") and not walkable(m, o["x"], o["y"]):
             m.set(o["x"], o["y"], ow_ground(o["x"], o["y"]) if m is ow else "c" if m.theme not in ("shop",) else "f")
 
-ensure_reachable(ow, (49, 63), ow_ground)
+ensure_reachable(ow, (s(49), s(63)), ow_ground)
 for m in MAPS[1:]:
     start = next((o["tx"], o["ty"]) for mm in MAPS for o in mm.objects if o["kind"] == "warp" and o["to"] == m.id)
     ensure_reachable(m, start, lambda x, y, m=m: "c" if m.theme not in ("shop", "spire", "rift") else "f" if m.theme == "shop" else "p")

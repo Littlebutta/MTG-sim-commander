@@ -193,6 +193,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   overlayRef.current = overlay;
   const busyRef = useRef(false);
   const heldRef = useRef<Dir[]>([]);
+  const tapRef = useRef<Dir | null>(null);
   const runRef = useRef(false);
   /** Open the spellbook once the current conversation ends. */
   const thenSpellbookRef = useRef(false);
@@ -602,7 +603,8 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
             persist();
           }
         }
-        const ev = w.update(dt, { held: heldRef.current, run: runRef.current }, paused);
+        const ev = w.update(dt, { held: heldRef.current, run: runRef.current, tap: tapRef.current }, paused);
+        tapRef.current = null;
         if (ev) void handle(w, ev);
         const dpr = window.devicePixelRatio || 1;
         // The interface is zoomed as a whole (see scale.ts); draw at real screen pixels.
@@ -634,6 +636,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       if (d) {
         e.preventDefault();
         if (!heldRef.current.includes(d)) heldRef.current = [...heldRef.current, d];
+        if (!e.repeat) tapRef.current = d;
         return;
       }
       if (e.key === "Shift") runRef.current = true;

@@ -113,6 +113,13 @@ export interface Actor {
   dir: Dir;
   homeDir: Dir;
   nextTurn: number;
+  /** Strolls around near home instead of standing still. */
+  wanders: boolean;
+  homeX: number;
+  homeY: number;
+  /** Mid-stroll: the step's direction and 0..1 progress (x,y is already the tile it's entering). */
+  stroll: Dir | null;
+  strollT: number;
   alert: number;
 }
 
@@ -211,7 +218,13 @@ function build(id: string): Built {
 export interface Input {
   held: Dir[];
   run: boolean;
+  /** A direction pressed since the last frame, even if it was already let go (quick taps). */
+  tap?: Dir | null;
 }
+
+/** Tiles per second. */
+const WALK_SPEED = 6.5;
+const RUN_SPEED = 11;
 
 export class World {
   mapId!: string;
@@ -249,10 +262,36 @@ export class World {
     this.progress = 0;
     this.actors = this.map.data.objects
       .filter((o) => o.kind === "npc" && o.id && PEOPLE[o.id])
-      .map((o) => ({ obj: o, id: o.id!, x: o.x, y: o.y, fx: 0, fy: 0, dir: o.dir ?? "down", homeDir: o.dir ?? "down", nextTurn: 2 + Math.random() * 4, alert: 0 }));
+      .map((o) => {
+        const p = PEOPLE[o.id!];
+        const boss = !!p.duel && p.duel.rank !== "duelist";
+        // About half the folk outdoors (and every creature) wander; bosses and shopkeepers keep still.
+        const wanders = !boss && this.mapId === "overworld" && (!!p.look.creature || hashString(`wander:${o.id}`) % 2 === 0);
+        return { obj: o, id: o.id!, x: o.x, y: o.y, fx: 0, fy: 0, dir: o.dir ?? "down", homeDir: o.dir ?? "down", nextTurn: 1 + Math.random() * 4, alert: 0, wanders, homeX: o.x, homeY: o.y, stroll: null, strollT: 0 };
+      });
+    // Never arrive inside a wall or a person (say, a position saved before the map changed).
+    if (this.blocked(this.px, this.py)) {
+      const seen = new Set([`${this.px},${this.py}`]);
+      const queue: [number, number][] = [[this.px, this.py]];
+      for (let i = 0; i < queue.length && i < 4000; i++) {
+        const [x, y] = queue[i];
+        if (!this.blocked(x, y)) {
+          this.px = x;
+          this.py = y;
+          break;
+        }
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = `${x + dx},${y + dy}`;
+          if (!seen.has(k) && this.tile(x + dx, y + dy) !== undefined) {
+            seen.add(k);
+            queue.push([x + dx, y + dy]);
+          }
+        }
+      }
+    }
     this.save.map = p.map;
-    this.save.x = p.x;
-    this.save.y = p.y;
+    this.save.x = this.px;
+    this.save.y = this.py;
     this.save.dir = p.dir;
   }
 
@@ -344,6 +383,10 @@ export class World {
     if (this.approaching) {
       const ap = this.approaching;
       const a = ap.actor;
+      if (a.stroll) {
+        a.stroll = null;
+        a.fx = a.fy = 0;
+      }
       const [dx, dy] = DX[a.dir];
       if (a.alert > 0) {
         a.alert -= dt;
@@ -372,7 +415,42 @@ export class World {
     if (paused) return null;
     // People glance around now and then.
     for (const a of this.actors) {
+      if (a.stroll) {
+        // A leisurely step, easing in and out.
+        a.strollT = Math.min(1, a.strollT + dt * 2.6);
+        const [sx, sy] = DX[a.stroll];
+        const ease = a.strollT * a.strollT * (3 - 2 * a.strollT);
+        a.fx = -sx * (1 - ease) * TILE;
+        a.fy = -sy * (1 - ease) * TILE;
+        if (a.strollT >= 1) {
+          a.stroll = null;
+          a.fx = a.fy = 0;
+        }
+        continue;
+      }
       a.nextTurn -= dt;
+      if (a.nextTurn <= 0 && a.wanders && Math.random() < 0.6) {
+        a.nextTurn = 1.2 + Math.random() * 3;
+        const dirs: Dir[] = ["up", "down", "left", "right"];
+        const d = dirs[Math.floor(Math.random() * 4)];
+        const [sx, sy] = DX[d];
+        const nx = a.x + sx;
+        const ny = a.y + sy;
+        const [mx, my] = this.moving ? DX[this.moving] : [0, 0];
+        const home = Math.abs(nx - a.homeX) + Math.abs(ny - a.homeY) <= 3;
+        const free = !this.blocked(nx, ny) && !(nx === this.px && ny === this.py) && !(nx === this.px + mx && ny === this.py + my);
+        const warp = this.objects().some((o) => o.kind === "warp" && Math.abs(o.x - nx) + Math.abs(o.y - ny) <= 1);
+        a.dir = d;
+        if (home && free && !warp) {
+          a.x = nx;
+          a.y = ny;
+          a.stroll = d;
+          a.strollT = 0;
+          a.fx = -sx * TILE;
+          a.fy = -sy * TILE;
+        }
+        continue;
+      }
       if (a.nextTurn <= 0) {
         const p = PEOPLE[a.id];
         const boss = p.duel && p.duel.rank !== "duelist";
@@ -384,9 +462,11 @@ export class World {
       }
     }
     if (this.moving) {
-      const speed = input.run ? 9 : 5;
+      // Ease into the first step from a standstill; after that, keep a steady pace.
+      const speed = (input.run ? RUN_SPEED : WALK_SPEED) * (this.chain ? 1 : 0.8 + 0.2 * this.progress);
       this.progress += dt * speed;
       if (this.progress >= 1) {
+        const extra = this.progress - 1;
         const [dx, dy] = DX[this.moving];
         this.px += dx;
         this.py += dy;
@@ -396,21 +476,43 @@ export class World {
         this.save.x = this.px;
         this.save.y = this.py;
         this.save.dir = this.dir;
-        return this.arrived();
+        const ev = this.arrived();
+        if (ev) {
+          this.chain = false;
+          return ev;
+        }
+        // Still holding a direction: carry straight on into the next tile with no pause, turning
+        // corners without stopping.
+        const want = input.held[input.held.length - 1];
+        if (want) {
+          this.dir = want;
+          const [nx, ny] = DX[want];
+          if (!this.blocked(this.px + nx, this.py + ny)) {
+            this.moving = want;
+            this.progress = Math.min(extra, 0.5);
+            this.chain = true;
+            return null;
+          }
+          this.bump = 0.2;
+        }
+        this.chain = false;
       }
       return null;
     }
     // Someone may have turned to face you while you stood still.
     const seen = this.sightCheck();
     if (seen) return { type: "challenge", npc: seen };
-    const want = input.held[input.held.length - 1];
+    const held = input.held[input.held.length - 1];
+    const want = held ?? input.tap ?? undefined;
     if (!want) {
       this.turnDelay = 0;
+      this.wasWalking = false;
       return null;
     }
-    if (want !== this.dir && this.turnDelay <= 0 && !this.wasWalking) {
+    // A quick tap toward a new direction just turns you to face it; holding it walks.
+    if (want !== this.dir && !this.wasWalking) {
       this.dir = want;
-      this.turnDelay = 0.09;
+      this.turnDelay = held ? 0.07 : 0;
       return null;
     }
     this.turnDelay -= dt;
@@ -423,9 +525,12 @@ export class World {
       return null;
     }
     this.moving = want;
-    this.wasWalking = true;
+    this.chain = false;
+    this.wasWalking = !!held;
     return null;
   }
+  /** Walking on from the last tile without stopping. */
+  private chain = false;
   private wasWalking = false;
 
   private arrived(): WorldEvent | null {
@@ -457,6 +562,7 @@ export class World {
   // ---------------------------------------------------------------- drawing
 
   private lastDraw = 0;
+  private cam: { map: string; x: number; y: number } | null = null;
 
   draw(c: CanvasRenderingContext2D, w: number, h: number, scale: number) {
     const d = this.map.data;
@@ -474,6 +580,14 @@ export class World {
     const mh = d.h * TILE;
     camX = mw <= vw ? (mw - vw) / 2 : Math.max(0, Math.min(mw - vw, camX));
     camY = mh <= vh ? (mh - vh) / 2 : Math.max(0, Math.min(mh - vh, camY));
+    // The camera glides after you instead of being bolted on; it snaps on a new map.
+    if (this.cam && this.cam.map === this.mapId && Math.abs(this.cam.x - camX) < vw && Math.abs(this.cam.y - camY) < vh) {
+      const k = 1 - Math.exp(-dt * 10);
+      this.cam.x += (camX - this.cam.x) * k;
+      this.cam.y += (camY - this.cam.y) * k;
+    } else this.cam = { map: this.mapId, x: camX, y: camY };
+    camX = this.cam.x;
+    camY = this.cam.y;
     camX = Math.round(camX * scale) / scale;
     camY = Math.round(camY * scale) / scale;
 
@@ -539,7 +653,7 @@ export class World {
       const p = PEOPLE[a.id];
       const ax = a.x * TILE + a.fx;
       const ay = a.y * TILE + a.fy;
-      const walking = this.approaching?.actor === a && a.alert <= 0;
+      const walking = (this.approaching?.actor === a && a.alert <= 0) || !!a.stroll;
       list.push({
         y: ay,
         draw: () => {
