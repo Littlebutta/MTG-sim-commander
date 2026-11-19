@@ -157,7 +157,7 @@ function Satchel({ save }: { save: Save }) {
           );
         })}
       </div>
-      {items.length > 0 && <p className="adv-muted small">Ysolde, who keeps the tower by the crossroads, can brew any spell from one of these.</p>}
+      {items.length > 0 && <p className="adv-muted small">Ysolde, who keeps the tower by the crossroads, can brew any card from one of these.</p>}
     </div>
   );
 }
@@ -310,8 +310,9 @@ export function Cauldron({ save, onBrew, onClose }: { save: Save; onBrew: (reage
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => {
-      searchCards({ text: text.trim(), limit: 60 })
-        .then((r) => live && setResults(r.filter((c) => !c.type_line.includes("Land") && c.supported)))
+      // Any card at all: the whole card library, even cards the table can only partly play.
+      searchCards({ text: text.trim(), limit: 80, include_banned: true })
+        .then((r) => live && setResults(r.filter((c) => !c.type_line.startsWith("Basic"))))
         .catch(() => live && setResults([]));
     }, 200);
     return () => {
@@ -326,7 +327,7 @@ export function Cauldron({ save, onBrew, onClose }: { save: Save; onBrew: (reage
           <h2>The Cauldron</h2>
           <button className="adv-close" onClick={onClose} aria-label="Step away">✕</button>
         </div>
-        <p className="adv-muted">Drop in a rare reagent and speak the name of a spell. The brew will remember it for you.</p>
+        <p className="adv-muted">Drop in a rare reagent and speak the name of any card. The brew will remember it for you.</p>
         <div className="adv-cauldron-reagents">
           {owned.map((id) => (
             <button key={id} className={`adv-reagent-pick ${reagent === id ? "on" : ""}`} onClick={() => setReagent(id)}>
@@ -335,7 +336,7 @@ export function Cauldron({ save, onBrew, onClose }: { save: Save; onBrew: (reage
             </button>
           ))}
         </div>
-        <input className="adv-search wide" autoFocus placeholder="Speak the spell's name, or what it does: “flying”, “destroy”, “dragon”…" value={text} onChange={(e) => setText(e.target.value)} />
+        <input className="adv-search wide" autoFocus placeholder="Speak the card's name, or what it does: “flying”, “destroy”, “dragon”…" value={text} onChange={(e) => setText(e.target.value)} />
         <div className="adv-cauldron-body">
           <div className="adv-cauldron-list">
             {results.map((c) => (
@@ -345,9 +346,11 @@ export function Cauldron({ save, onBrew, onClose }: { save: Save; onBrew: (reage
               </button>
             ))}
             {results.length === 0 && <p className="adv-muted">The brew stays murky. Try another word.</p>}
+            {results.length >= 80 && <p className="adv-muted small">The steam shows only the first 80. Say more of the name to narrow it.</p>}
           </div>
           <div className="adv-cauldron-preview">
-            {pick ? <CardPreview card={asView(pick)} /> : <p className="adv-muted">Choose a spell to see it rise in the steam.</p>}
+            {pick ? <CardPreview card={asView(pick)} /> : <p className="adv-muted">Choose a card to see it rise in the steam.</p>}
+            {pick && !pick.supported && <p className="adv-muted small">Some of this card's text isn't supported in duels yet; those parts won't do anything.</p>}
           </div>
         </div>
         <div className="adv-actions">
