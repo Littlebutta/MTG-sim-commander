@@ -267,3 +267,56 @@
   .adv-book-right { display: none; }
   .adv-stats { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ---- readability: game components inside adventure windows keep the table's light-on-dark text */
+.adv-root .preview, .adv-scrim .preview, .adv-root .card, .adv-scrim .card { color: var(--text); font-family: var(--sans); }
+.adv-root, .adv-scrim, .adv-duel-intro, .adv-ending { --ink-soft: #4a3828; }
+.adv-dialogue-text { font-size: clamp(18px, 1.35vw, 24px); line-height: 1.5; color: var(--ink); }
+.adv-muted { color: var(--ink-soft); }
+
+/* ---- the spellbook: the main deck builder, full screen, in the table's own colors */
+.adv-builder {
+  position: fixed; inset: 0; z-index: 60; background: var(--bg-0); color: var(--text); font: 14px/1.4 var(--sans);
+  display: flex; flex-direction: column;
+}
+.adv-builder .builder-screen { flex: 1; min-height: 0; }
+.adv-build-status { margin: 6px 0 2px; padding: 8px 10px; border-radius: 8px; font-size: 13px; border: 1px solid var(--line); }
+.adv-build-status.ok { background: rgba(89, 217, 142, 0.1); border-color: rgba(89, 217, 142, 0.4); color: var(--text); }
+.adv-build-status.bad { background: rgba(255, 77, 94, 0.1); border-color: rgba(255, 77, 94, 0.45); color: var(--text); }
+.b-owned { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+
+/* ---- HUD */
+.adv-hud { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+.adv-hud .adv-journal-btn { position: static; }
+
+/* ---- typed answers */
+.adv-ask { display: flex; gap: 12px; align-items: center; margin-top: 14px; }
+.adv-ask .adv-name { flex: 0 1 320px; }
+
+/* ---- options */
+.adv-options { padding: 18px 24px; overflow-y: auto; max-height: 100%; display: flex; flex-direction: column; gap: 10px; }
+.adv-options h3 { margin: 10px 0 0; }
+.adv-pool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.adv-pool { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--paper-2); border: 3px solid var(--paper-3); cursor: pointer; }
+.adv-pool.on { border-color: var(--frame); background: var(--paper); }
+.adv-pool input { margin-top: 4px; width: 18px; height: 18px; accent-color: #6a4a2a; }
+.adv-pool > span { display: flex; flex-direction: column; gap: 4px; font-size: 16px; }
+.adv-pool .adv-muted { font-size: 14px; line-height: 1.4; }
+
+/* ---- save slots (in the table's style, like the other menus) */
+.adv-slots { max-width: 860px; margin: 0 auto; width: 100%; }
+.adv-slot-list { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+.adv-slot {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px;
+  border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04);
+}
+.adv-slot.last { border-color: rgba(255, 179, 71, 0.5); }
+.adv-slot.empty { background: transparent; border-style: dashed; }
+.adv-slot-main { display: flex; align-items: center; gap: 14px; }
+.adv-slot-main .adv-portrait { image-rendering: pixelated; background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+.adv-slot-n { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); font: 600 20px var(--serif); color: var(--muted); }
+.adv-slot-text { display: flex; flex-direction: column; gap: 4px; }
+.adv-slot-text strong { font: 600 17px var(--serif); }
+.adv-slot-text .muted { font-size: 13px; line-height: 1.5; }
+.adv-slot-actions { display: flex; align-items: center; gap: 8px; }
+.adv-slot-hint { text-align: center; }

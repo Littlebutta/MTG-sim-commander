@@ -549,6 +549,7 @@ export function personSprite(look: Look, dir: Dir, frame: number): HTMLCanvasEle
   cv.height = TILE;
   const c = cv.getContext("2d")!;
   const rows = BODY[dir === "left" ? "right" : dir][frame % 2];
+  const grid: string[][] = Array.from({ length: TILE }, () => Array(TILE).fill(""));
   const pal: Record<string, string> = {
     o: "#1b1420", h: look.hair, s: look.skin, e: "#1b1420", c: look.cloth, d: shade(look.cloth, 0.7), a: look.accent, b: "#3a2a20",
   };
@@ -558,6 +559,7 @@ export function personSprite(look: Look, dir: Dir, frame: number): HTMLCanvasEle
       if (!col) return;
       const xx = dir === "left" ? 15 - x : x;
       px(c, xx, y, col);
+      grid[y][xx] = ch;
     });
   });
   // Hair highlight.
@@ -602,7 +604,48 @@ export function personSprite(look: Look, dir: Dir, frame: number): HTMLCanvasEle
       if (dir === "right" || dir === "left") { px(c, flip(8, 4), 8, ex, 4, 3); px(c, flip(8, 3), 11, ex, 3, 1); }
       break;
   }
-  spriteCache.set(key, cv);
+  const hd = refineSprite(cv, grid, look);
+  spriteCache.set(key, hd);
+  return hd;
+}
+
+/** Double a sprite and add half-pixel shading: light from the upper left, folds in cloth, a
+ * glint in the eyes and strands in the hair. */
+function refineSprite(src: HTMLCanvasElement, grid: string[][], look: Look): HTMLCanvasElement {
+  const S = TILE * DETAIL;
+  const cv = document.createElement("canvas");
+  cv.width = S;
+  cv.height = S;
+  const c = cv.getContext("2d")!;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(src, 0, 0, S, S);
+  const at = (x: number, y: number) => (x >= 0 && y >= 0 && x < TILE && y < TILE ? grid[y][x] : "");
+  const dot = (x: number, y: number, col: string) => {
+    c.fillStyle = col;
+    c.fillRect(x, y, 1, 1);
+  };
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const ch = grid[y][x];
+      if (!ch || ch === "o") continue;
+      const X = x * 2;
+      const Y = y * 2;
+      if (ch === "c" || ch === "d") {
+        if (at(x, y - 1) === "o" || at(x - 1, y) === "o") dot(X, Y, shade(look.cloth, 1.18));
+        if (at(x + 1, y) === "o" || at(x, y + 1) === "o") dot(X + 1, Y + 1, shade(look.cloth, 0.62));
+      } else if (ch === "h") {
+        if ((x + y) % 3 === 0) dot(X, Y, shade(look.hair, 1.3));
+        if (at(x, y + 1) !== "h") dot(X + 1, Y + 1, shade(look.hair, 0.7));
+      } else if (ch === "s") {
+        if (at(x, y + 1) === "o" || at(x + 1, y) === "o") dot(X + 1, Y + 1, shade(look.skin, 0.85));
+        if (at(x - 1, y) === "o" && at(x, y - 1) !== "s") dot(X, Y, shade(look.skin, 1.08));
+      } else if (ch === "e") {
+        dot(X + 1, Y, "#ffffffcc");
+      } else if (ch === "a") {
+        dot(X, Y, shade(look.accent, 1.2));
+      }
+    }
+  }
   return cv;
 }
 
@@ -686,6 +729,134 @@ export function paintObject(c: Ctx, kind: string, x: number, y: number, t: numbe
         px(c, Math.round(sx), y + 7, i < lit ? cols[i] : "#3a2f4a", 2, 2);
       }
       if (lit >= 5 && (t * 2) % 2 < 1) px(c, x + 2, y + 4, "#b388ff55", 12, 8);
+      return;
+    }
+  }
+}
+
+// ---------------------------------------------------------------- fine detail
+//
+// The map is baked at twice the tile resolution. After each 16-pixel tile is drawn (doubled),
+// this adds half-pixel detail on top: grass blades, leaf light, pebbles, shingle highlights and
+// softer edges where ground types meet.
+
+export const DETAIL = 2;
+const GRASSY = new Set([".", ",", '"', "h"]);
+
+/** `nb` holds the four neighbors: up, right, down, left. */
+export function detailTile(c: Ctx, ch: string, ox: number, oy: number, seed: number, nb: (string | undefined)[], under: string) {
+  const r = rng(seed * 7919 + ch.charCodeAt(0));
+  const S = TILE * DETAIL;
+  const dot = (x: number, y: number, col: string, w = 1, h = 1) => {
+    c.fillStyle = col;
+    c.fillRect(ox + x, oy + y, w, h);
+  };
+  const grassBlades = (g: [string, string, string], n: number) => {
+    for (let i = 0; i < n; i++) {
+      const x = Math.floor(r() * S);
+      const y = 2 + Math.floor(r() * (S - 2));
+      const light = r() < 0.45;
+      dot(x, y - 2, light ? g[2] : g[1], 1, 2);
+      if (r() < 0.5) dot(x + 1, y - 3, light ? g[2] : g[1]);
+    }
+    // A soft light patch on some tiles.
+    if (r() < 0.25) {
+      c.fillStyle = "rgba(255,255,210,0.06)";
+      c.fillRect(ox + Math.floor(r() * 16), oy + Math.floor(r() * 16), 12, 8);
+    }
+  };
+  switch (ch) {
+    case ".": case ",": case "h": case "m": case "a":
+      grassBlades(GROUND[ch === "," ? "." : ch] ?? GROUND["."], 14);
+      return;
+    case '"': {
+      // Taller grass: fine dark stems and bright tips.
+      for (let i = 0; i < 16; i++) {
+        const x = Math.floor(r() * S);
+        const y = 4 + Math.floor(r() * (S - 4));
+        dot(x, y - 4, "#2f6e22", 1, 4);
+        dot(x, y - 5, "#a6e07a");
+      }
+      return;
+    }
+    case ":": case "s": {
+      const base = GROUND[ch];
+      for (let i = 0; i < 9; i++) {
+        const x = Math.floor(r() * (S - 2));
+        const y = Math.floor(r() * (S - 2));
+        dot(x, y, base[1], 2, 1);
+        dot(x, y - 1, base[2], 2, 1);
+      }
+      // Ragged grass fringe where the path meets grass.
+      const g = GROUND[GRASSY.has(under) ? under : "."];
+      const fringe = (side: number) => {
+        for (let k = 0; k < S; k += 1) {
+          const depth = Math.floor(r() * 4) + (k % 5 === 0 ? 2 : 0);
+          const col = r() < 0.3 ? g[2] : g[0];
+          if (side === 0) dot(k, 0, col, 1, depth);
+          if (side === 2) dot(k, S - depth, col, 1, depth);
+          if (side === 3) dot(0, k, col, depth, 1);
+          if (side === 1) dot(S - depth, k, col, depth, 1);
+        }
+      };
+      nb.forEach((n, side) => n && GRASSY.has(n) && fringe(side));
+      return;
+    }
+    case "T": {
+      // Leaf light on the upper left of the canopy, shade on the lower right.
+      for (let i = 0; i < 26; i++) {
+        const x = 6 + Math.floor(r() * 20);
+        const y = 3 + Math.floor(r() * 18);
+        const upperLeft = x + y < 30;
+        if (upperLeft) dot(x, y, r() < 0.5 ? "#7fd67a" : "#5cbf5f");
+        else dot(x, y, r() < 0.5 ? "#1f5a22" : "#2a6e2d");
+      }
+      dot(14, 23, "#8a6440", 1, 8);
+      dot(16, 25, "#4a3018", 1, 5);
+      return;
+    }
+    case "P": {
+      for (let i = 0; i < 6; i++) {
+        const w = 4 + i * 4;
+        const y = 2 + i * 4;
+        dot(16 - w / 2, y + 1, "#5aa58a", Math.max(1, w / 3), 1);
+        dot(16 + w / 4, y + 3, "#163f36", Math.max(1, w / 4), 1);
+      }
+      return;
+    }
+    case "O": case "U": case "G": case "J": {
+      // Shingle edges catch the light.
+      for (let y = 1; y < S; y += 8) for (let x = (y % 16 === 1 ? 2 : 6); x < S; x += 8) dot(x, y, "rgba(255,255,255,0.18)", 4, 1);
+      return;
+    }
+    case "H": case "N": {
+      for (let i = 0; i < 6; i++) dot(Math.floor(r() * S), 6 + Math.floor(r() * 20), "rgba(120,80,40,0.18)", 2, 1);
+      return;
+    }
+    case "R": {
+      for (let i = 0; i < 10; i++) {
+        const x = Math.floor(r() * (S - 3));
+        const y = Math.floor(r() * (S - 3));
+        dot(x, y, "rgba(255,255,255,0.12)", 3, 1);
+        dot(x + 1, y + 1, "rgba(0,0,0,0.15)", 3, 1);
+      }
+      return;
+    }
+    case "c": case "p": case "g": case "f": {
+      for (let i = 0; i < 8; i++) dot(Math.floor(r() * S), Math.floor(r() * S), r() < 0.5 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.1)");
+      if (r() < 0.2) {
+        // A hairline crack.
+        let x = Math.floor(r() * S), y = Math.floor(r() * S);
+        for (let k = 0; k < 6; k++) {
+          dot(x, y, "rgba(0,0,0,0.18)");
+          x += r() < 0.5 ? 1 : 0;
+          y += 1;
+        }
+      }
+      return;
+    }
+    case "W": {
+      for (let i = 0; i < 6; i++) dot(Math.floor(r() * S), Math.floor(r() * S), "rgba(0,0,0,0.12)", 2, 1);
       return;
     }
   }

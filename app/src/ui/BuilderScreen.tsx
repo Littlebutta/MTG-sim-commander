@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   builtinDecks, listDecks, lookupCards, newDeckId, recommendCards, saveDeck, searchCards,
   type CardSummary, type Recommendations, type Role, type SavedDeck,
@@ -6,6 +6,7 @@ import {
 import type { CardView } from "../engine/types";
 import { CardArt, ManaCost, RulesText } from "./Card";
 import { explain } from "./keywords";
+import { uiScale } from "../scale";
 
 // Deck builder: search the card pool on the left, the deck in the middle, and on the right what
 // the deck is short of with cards that would help.
@@ -66,9 +67,42 @@ function Pips({ colors }: { colors: string }) {
   return <span className="pips">{colors.split("").map((c) => <span key={c} className={`pip pip-${c}`} />)}</span>;
 }
 
+/** Where the mouse is, in the interface's own (zoomed) pixels. */
+const mouse = { x: 0, y: 0 };
+if (typeof window !== "undefined") {
+  window.addEventListener("mousemove", (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  }, { passive: true });
+}
+
+/** A card's details beside the mouse, on whichever side keeps the pointer (and the buttons
+ * under it) uncovered. */
 function CardTip({ card }: { card: CardSummary }) {
+  // Follow the mouse, so moving onto a row's buttons never leaves the tip on top of them.
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const move = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => redraw((n) => n + 1));
+    };
+    window.addEventListener("mousemove", move, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", move);
+    };
+  }, []);
+  const z = uiScale() || 1;
+  const vw = window.innerWidth / z;
+  const vh = window.innerHeight / z;
+  const x = mouse.x / z;
+  const y = mouse.y / z;
+  const W = 300;
+  const left = x > vw / 2 ? Math.max(8, x - W - 36) : Math.min(vw - W - 8, x + 36);
+  const top = Math.max(8, Math.min(vh - 280, y - 60));
   return (
-    <div className="b-tip">
+    <div className="b-tip" style={{ left, top, right: "auto", bottom: "auto" }}>
       <div className="b-tip-head"><strong>{card.name}</strong><ManaCost cost={card.mana_cost} /></div>
       <div className="b-tip-type">{card.type_line}</div>
       <div className="b-tip-text">{card.oracle_text || <span className="muted">No rules text.</span>}</div>
@@ -125,24 +159,25 @@ function CardWindow({ card, onClose, inDeck, onAdd, onRemove }: {
 const CURVE_TARGET = [0.08, 0.22, 0.22, 0.18, 0.13, 0.09, 0.08];
 
 /** What the mana curve and colors say about a deck, in plain words. */
-function curveAdvice(curve: number[], avg: number, pips: Record<string, number>, sources: Record<string, number>): string[] {
+function curveAdvice(curve: number[], avg: number, pips: Record<string, number>, sources: Record<string, number>, small = false): string[] {
   const out: string[] = [];
   const buckets = [curve[0] + curve[1], curve[2], curve[3], curve[4], curve[5], curve[6], curve[7]];
   const total = buckets.reduce((a, b) => a + b, 0);
-  if (total < 10) return ["Add more cards to see advice about your mana curve."];
+  if (total < (small ? 6 : 10)) return ["Add more cards to see advice about your mana curve."];
   const names = ["0–1", "2", "3", "4", "5", "6", "7+"];
   const diffs = buckets.map((n, i) => n - CURVE_TARGET[i] * total);
   // Too few cheap-to-mid spells, or too many expensive ones, are what hurt; the reverse is fine.
-  const low = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 1 && i <= 3 && d <= -3).sort((a, b) => a[0] - b[0]);
-  const high = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 4 && d >= 3).sort((a, b) => b[0] - a[0]);
+  const step = small ? 2 : 3;
+  const low = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 1 && i <= 3 && d <= -step).sort((a, b) => a[0] - b[0]);
+  const high = diffs.map((d, i) => [d, i] as const).filter(([d, i]) => i >= 4 && d >= step).sort((a, b) => b[0] - a[0]);
   if (avg >= 4) out.push(`Average mana value is ${avg.toFixed(2)}: a slow deck. Cheaper spells and more ramp will help you keep up.`);
   else if (avg > 0 && avg <= 2.4) out.push(`Average mana value is ${avg.toFixed(2)}: a fast, low curve. You can run 1–2 fewer lands.`);
-  else out.push(`Average mana value is ${avg.toFixed(2)}, a comfortable middle for Commander.`);
+  else out.push(`Average mana value is ${avg.toFixed(2)}, a comfortable middle${small ? "" : " for Commander"}.`);
   const top = buckets[5] + buckets[6];
   if (top > total * 0.25) out.push(`${top} cards cost 6 or more. That's top-heavy; trim a few or add ramp.`);
   if (low.length) out.push(`Light at ${low.map(([d, i]) => `${names[i]} mana (about ${Math.round(-d)} short)`).join(", ")}.`);
   if (high.length) out.push(`Heavy at ${high.map(([d, i]) => `${names[i]} mana (about ${Math.round(d)} extra)`).join(", ")}.`);
-  if (buckets[1] < 8) out.push("Two-mana plays are what let you do something on turn 2; most decks want 10 or more.");
+  if (buckets[1] < (small ? 5 : 8)) out.push(`Two-mana plays are what let you do something on turn 2; most decks want ${small ? "6" : "10"} or more.`);
   const pipTotal = Object.values(pips).reduce((a, b) => a + b, 0);
   const srcTotal = Object.values(sources).reduce((a, b) => a + b, 0);
   if (pipTotal > 0 && srcTotal > 0) {
@@ -189,15 +224,34 @@ function ExportWindow({ name, text, onClose }: { name: string; text: string; onC
   );
 }
 
-export function BuilderScreen({ onBack }: { onBack: () => void }) {
+/** Building from a collection instead of the whole card pool (adventure mode): no commander, a
+ * copy limit, and only cards you own (basic lands are free). Changes are handed back as they
+ * happen; there is no separate save. */
+export interface CollectionBuild {
+  title: string;
+  name: string;
+  cards: Record<string, number>;
+  owned: Record<string, number>;
+  basics: string[];
+  maxCopies: number;
+  minCards: number;
+  backLabel: string;
+  onChange: (name: string, cards: Record<string, number>) => void;
+  /** A line under the deck: is it ready to play? */
+  status?: React.ReactNode;
+}
+
+export function BuilderScreen({ onBack, collection }: { onBack: () => void; collection?: CollectionBuild }) {
+  const adv = collection;
   const [decks, setDecks] = useState<SavedDeck[]>([]);
-  const [deck, setDeck] = useState<SavedDeck>(() => ({ id: newDeckId(), name: "New deck", text: "", updated: 0 }));
-  const [draft, setDraft] = useState<Draft>({ commanders: [], cards: new Map() });
+  const [deck, setDeck] = useState<SavedDeck>(() => ({ id: newDeckId(), name: adv?.name ?? "New deck", text: "", updated: 0 }));
+  const [draft, setDraft] = useState<Draft>(() => ({ commanders: [], cards: new Map(adv ? Object.entries(adv.cards).filter(([, n]) => n > 0) : []) }));
+  const [pool, setPool] = useState<CardSummary[]>([]);
   const [saved, setSaved] = useState(true);
   const [info, setInfo] = useState<Map<string, CardSummary>>(new Map());
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [fitColors, setFitColors] = useState(true);
+  const [fitColors, setFitColors] = useState(!adv);
   const [results, setResults] = useState<CardSummary[]>([]);
   const [rec, setRec] = useState<Recommendations | null>(null);
   const [tip, setTip] = useState<CardSummary | null>(null);
@@ -206,12 +260,49 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
+    if (adv) return;
     Promise.all([listDecks(), builtinDecks()]).then(([m, b]) => setDecks([...m, ...b]));
-  }, []);
+  }, [adv]);
+
+  // Collection building: the cards you own (and the basics) are the whole search pool.
+  const ownedKey = adv ? Object.keys(adv.owned).filter((n) => adv.owned[n] > 0).sort().join("|") : "";
+  useEffect(() => {
+    if (!adv) return;
+    const names = [...ownedKey.split("|").filter(Boolean), ...adv.basics];
+    lookupCards(names).then((cards) => {
+      setPool(cards);
+      setInfo((old) => {
+        const m = new Map(old);
+        for (const c of cards) m.set(c.name, c);
+        return m;
+      });
+    }).catch((e) => setMessage(String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownedKey]);
+
+  // Hand every change back.
+  const advRef = useRef(adv);
+  advRef.current = adv;
+  const firstRef = useRef(true);
+  useEffect(() => {
+    if (firstRef.current) {
+      firstRef.current = false;
+      return;
+    }
+    advRef.current?.onChange(deck.name, Object.fromEntries(draft.cards));
+  }, [draft, deck.name]);
 
   const text = useMemo(() => serialize(draft), [draft]);
-  const needCommander = draft.commanders.length === 0;
-  const identity = rec?.identity ?? "";
+  const needCommander = !adv && draft.commanders.length === 0;
+  // Without a commander, a deck's colors are the colors of what's in it.
+  const deckIdentity = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of draft.cards.keys()) for (const c of info.get(n)?.color_identity ?? "") set.add(c);
+    return "WUBRG".split("").filter((c) => set.has(c)).join("");
+  }, [draft, info]);
+  const identity = adv ? deckIdentity : rec?.identity ?? "";
+  /** Copies of a card the deck may hold. */
+  const allowed = (c: CardSummary) => (isBasic(c) ? Infinity : adv ? Math.min(adv.maxCopies, adv.owned[c.name] ?? 0) : 1);
 
   // Card details for everything in the deck.
   useEffect(() => {
@@ -234,6 +325,24 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
 
   // Search as you type.
   useEffect(() => {
+    if (adv) {
+      const q = query.trim().toLowerCase();
+      const words = q.split(/\s+/).filter(Boolean);
+      const idSet = new Set(identity.split(""));
+      const hits = pool
+        .filter((c) => !typeFilter || c.type_line.includes(typeFilter))
+        .filter((c) => !fitColors || !identity || c.color_identity.split("").every((x) => idSet.has(x)))
+        .filter((c) => {
+          if (!q) return true;
+          const name = c.name.toLowerCase();
+          if (name.includes(q)) return true;
+          const all = `${name} ${c.type_line} ${c.oracle_text}`.toLowerCase();
+          return words.every((w) => all.includes(w));
+        })
+        .sort((a, b) => Number(isBasic(a)) - Number(isBasic(b)) || a.mana_value - b.mana_value || a.name.localeCompare(b.name));
+      setResults(hits);
+      return;
+    }
     const t = setTimeout(() => {
       searchCards({
         text: query,
@@ -244,7 +353,8 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
       }).then(setResults).catch((e) => setMessage(String(e)));
     }, 150);
     return () => clearTimeout(t);
-  }, [query, typeFilter, fitColors, identity, needCommander]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, typeFilter, fitColors, identity, needCommander, pool]);
 
   useEffect(() => {
     if (!message) return;
@@ -264,7 +374,7 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
     if (needCommander && c.can_be_commander) return makeCommander(c);
     change((d) => {
       const n = d.cards.get(c.name) ?? 0;
-      if (n > 0 && !isBasic(c)) return;
+      if (n >= allowed(c)) return;
       d.cards.set(c.name, n + 1);
     });
   };
@@ -321,7 +431,10 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
 
   const stats = rec?.stats;
   const curveMax = Math.max(1, ...(stats?.curve ?? [1]));
-  const meters: [Role, number, number][] = stats
+  const size = Math.max(adv?.minCards ?? 40, count) / 40;
+  const meters: [Role, number, number][] = stats && adv
+    ? [["Land", stats.lands, Math.round(17 * size)], ["Ramp", stats.ramp, Math.round(2 * size)], ["Draw", stats.draw, Math.round(3 * size)], ["Removal", stats.removal, Math.round(4 * size)], ["Creature", stats.creatures, Math.round(15 * size)]]
+    : stats
     ? [["Land", stats.lands, stats.avg_mv > 0 && stats.avg_mv < 2.6 ? 35 : 37], ["Ramp", stats.ramp, 10], ["Draw", stats.draw, 10], ["Removal", stats.removal, 8], ["Wipe", stats.wipes, 2], ["Creature", stats.creatures, 20]]
     : [];
   const inDeck = (n: string) => draft.commanders.includes(n) || draft.cards.has(n);
@@ -340,23 +453,34 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
     }
     return { pips, sources };
   }, [draft, info]);
-  const curveTips = stats ? curveAdvice(stats.curve, stats.avg_mv, pips, sources) : [];
+  const curveTips = stats ? curveAdvice(stats.curve, stats.avg_mv, pips, sources, !!adv) : [];
+  const countOf = (n: string) => draft.cards.get(n) ?? 0;
+  const maxed = (c: CardSummary) => countOf(c.name) >= allowed(c);
+  // Suggestions from your own cards: ones that fill a role the deck is short of.
+  const short = new Set(meters.filter(([, have, want]) => have < want - 1).map(([r]) => r));
+  const ownedPicks = adv
+    ? pool
+        .filter((c) => !isBasic(c) && !maxed(c) && c.roles.some((r) => short.has(r)))
+        .filter((c) => !identity || c.color_identity.split("").every((x) => identity.includes(x)))
+        .slice(0, 30)
+        .map((c) => ({ card: c, role: c.roles.find((r) => short.has(r)) ?? null, reason: countOf(c.name) ? `${countOf(c.name)} in your deck` : "In your collection" }))
+    : [];
   const nonland = stats ? stats.curve.reduce((a, b) => a + b, 0) : 0;
   const targetAt = (i: number) => (i <= 1 ? CURVE_TARGET[0] / 2 : CURVE_TARGET[i - 1]) * nonland;
   const curveTop = Math.max(curveMax, ...Array.from({ length: 8 }, (_, i) => targetAt(i)));
 
   const resultRow = (c: CardSummary, extra?: React.ReactNode) => (
-    <div key={c.name} className={`b-row ${inDeck(c.name) && !isBasic(c) ? "in" : ""}`} onMouseEnter={() => setTip(c)} onMouseLeave={() => setTip(null)}
+    <div key={c.name} className={`b-row ${maxed(c) ? "in" : ""}`} onMouseEnter={() => setTip(c)} onMouseLeave={() => setTip(null)}
       onContextMenu={(e) => { e.preventDefault(); setTip(null); setOpened(c); }}>
       <span className="b-mv"><ManaCost cost={c.mana_cost} /></span>
       <span className="b-name">
         <span>{c.name}</span>
-        <span className="b-type">{c.type_line}{!c.supported && <span className="b-partial" title="Some of this card's text isn't supported in games yet"> · partly supported</span>}</span>
+        <span className="b-type">{adv && !isBasic(c) && <span className="b-owned">{countOf(c.name)}/{Math.min(adv.maxCopies, adv.owned[c.name] ?? 0)} · </span>}{c.type_line}{!c.supported && <span className="b-partial" title="Some of this card's text isn't supported in games yet"> · partly supported</span>}</span>
         {extra}
       </span>
       {needCommander && c.can_be_commander ? (
         <button className="btn b-add" onClick={() => makeCommander(c)}>Commander</button>
-      ) : inDeck(c.name) && !isBasic(c) ? (
+      ) : maxed(c) ? (
         <span className="b-check" title="In your deck">✓</span>
       ) : (
         <button className="btn b-add" onClick={() => add(c)} title="Add to deck">+</button>
@@ -367,14 +491,14 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
   return (
     <div className="screen builder-screen">
       <header className="screen-head">
-        <button className="ghost" onClick={onBack}>← Back</button>
-        <h2>Deck builder</h2>
+        <button className="ghost" onClick={onBack}>← {adv?.backLabel ?? "Back"}</button>
+        <h2>{adv?.title ?? "Deck builder"}</h2>
         <span />
       </header>
       <div className="builder-layout">
         {/* Search */}
         <section className="b-col b-search">
-          <input className="field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={needCommander ? "Search for a commander…" : "Search cards by name, type or text"} autoFocus />
+          <input className="field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={needCommander ? "Search for a commander…" : adv ? "Search your cards by name, type or text" : "Search cards by name, type or text"} autoFocus={!adv} />
           <div className="b-filters">
             {TYPE_FILTERS.map((t) => (
               <button key={t} className={`chip-btn ${typeFilter === t ? "on" : ""}`} onClick={() => setTypeFilter(typeFilter === t ? null : t)}>{t}</button>
@@ -386,26 +510,31 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
           <div className="b-list">
             {needCommander && !query && !typeFilter && <div className="menu-label">Commanders</div>}
             {results.map((c) => resultRow(c))}
-            {results.length === 0 && <p className="muted small">No cards match.</p>}
+            {results.length === 0 && <p className="muted small">{adv && pool.length <= adv.basics.length ? "No cards yet. Explore, duel, and look in the tall grass." : "No cards match."}</p>}
           </div>
         </section>
 
         {/* Deck */}
         <section className="b-col b-deck">
           <div className="b-deck-head">
-            <select className="field" value={decks.some((d) => d.id === deck.id) ? deck.id : ""} onChange={(e) => open(e.target.value)} aria-label="Open a deck">
+            {!adv && <select className="field" value={decks.some((d) => d.id === deck.id) ? deck.id : ""} onChange={(e) => open(e.target.value)} aria-label="Open a deck">
               <option value="" disabled>{saved ? "Open a deck…" : "Unsaved deck"}</option>
               <option value="new">New deck</option>
               <optgroup label="Your decks">{decks.filter((d) => !d.builtin).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>
               <optgroup label="Copy a built-in deck">{decks.filter((d) => d.builtin).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</optgroup>
-            </select>
+            </select>}
             <input className="field b-deck-name" value={deck.name} onChange={(e) => { setDeck({ ...deck, name: e.target.value }); setSaved(false); }} aria-label="Deck name" />
-            <span className={`check-count ${count === 100 ? "ok" : ""}`}>{count}/100</span>
+            {adv ? (
+              <span className={`check-count ${count >= adv.minCards ? "ok" : ""}`} title={`At least ${adv.minCards} cards`}>{count} cards</span>
+            ) : (
+              <span className={`check-count ${count === 100 ? "ok" : ""}`}>{count}/100</span>
+            )}
             <button className="btn" onClick={() => setExporting(true)} disabled={count === 0} title="Copy or download the decklist as text">Export</button>
-            <button className="btn btn-primary" disabled={saved} onClick={save}>{saved ? "Saved" : "Save"}</button>
+            {!adv && <button className="btn btn-primary" disabled={saved} onClick={save}>{saved ? "Saved" : "Save"}</button>}
           </div>
+          {adv?.status}
           <div className="b-list b-decklist">
-            <div className="b-group">
+            {!adv && <div className="b-group">
               <div className="menu-label">Commander</div>
               {draft.commanders.length === 0 && <p className="muted small">Search on the left and pick a commander to start.</p>}
               {draft.commanders.map((n) => (
@@ -416,7 +545,7 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
                   <button className="ghost b-qty" onClick={() => removeCommander(n)} title="Remove">✕</button>
                 </div>
               ))}
-            </div>
+            </div>}
             {grouped.map(([label, rows]) => (
               <div key={label} className="b-group">
                 <div className="menu-label">{label} <span className="muted">{rows.reduce((a, r) => a + r[1], 0)}</span></div>
@@ -429,7 +558,7 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
                       <span className="b-name"><span>{q > 1 ? `${q}× ` : ""}{n}</span></span>
                       <span className="b-qtys">
                         <button className="ghost b-qty" onClick={() => remove(n)} title="Remove one">−</button>
-                        {isBasic(c) && <button className="ghost b-qty" onClick={() => c && add(c)} title="Add one">+</button>}
+                        {c && !maxed(c) && (adv || isBasic(c)) && <button className="ghost b-qty" onClick={() => add(c)} title="Add one">+</button>}
                       </span>
                     </div>
                   );
@@ -475,13 +604,23 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
               </div>
             </div>
           )}
-          {rec && rec.themes.length > 0 && (
+          {!adv && rec && rec.themes.length > 0 && (
             <div className="b-themes"><span className="muted small">Your commander likes</span> {rec.themes.map((t) => <span key={t} className="chip">{t}</span>)}</div>
           )}
-          {rec && rec.advice.length > 0 && (
+          {!adv && rec && rec.advice.length > 0 && (
             <ul className="b-tips">{rec.advice.map((a) => <li key={a.text}>{a.text}</li>)}</ul>
           )}
-          {rec && rec.picks.length > 0 && (
+          {adv && ownedPicks.length > 0 && (
+            <>
+              <div className="menu-label">From your collection</div>
+              <div className="b-list">
+                {ownedPicks.map((p) => resultRow(p.card, (
+                  <span className="b-reason">{p.role && <span className={`b-role role-${p.role}`}>{ROLE_SHORT[p.role]}</span>}{p.reason}</span>
+                )))}
+              </div>
+            </>
+          )}
+          {!adv && rec && rec.picks.length > 0 && (
             <>
               <div className="menu-label">Suggestions</div>
               <div className="b-list">
@@ -495,7 +634,7 @@ export function BuilderScreen({ onBack }: { onBack: () => void }) {
       </div>
       {tip && !opened && <CardTip card={tip} />}
       {opened && (
-        <CardWindow card={opened} onClose={() => setOpened(null)} inDeck={inDeck(opened.name)}
+        <CardWindow card={opened} onClose={() => setOpened(null)} inDeck={adv ? maxed(opened) && countOf(opened.name) > 0 : inDeck(opened.name)}
           onAdd={() => { add(opened); setOpened(null); }}
           onRemove={() => { if (draft.commanders.includes(opened.name)) removeCommander(opened.name); else remove(opened.name); setOpened(null); }} />
       )}

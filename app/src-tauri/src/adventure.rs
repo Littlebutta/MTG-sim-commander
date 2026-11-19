@@ -1,4 +1,4 @@
-//! Adventure mode: the saved journey and adventure deck checks (no singleton, up to four
+//! Adventure mode: saved journeys (in slots) and adventure deck checks (no singleton, up to four
 //! copies, against the full card pool).
 
 use crate::{data_dir, PoolState};
@@ -6,14 +6,19 @@ use client_api::adventure::AdventureDeckCheck;
 use client_api::ResolvedDeck;
 use std::fs;
 
-fn save_path() -> std::path::PathBuf {
-    data_dir().join("adventure.json")
+/// Journeys are kept in save slots. Slot 1 is `adventure.json` (where the single save used to
+/// live), the others `adventure-2.json` and so on.
+fn file_name(slot: Option<u8>) -> String {
+    match slot.unwrap_or(1).clamp(1, 9) {
+        1 => "adventure.json".into(),
+        n => format!("adventure-{n}.json"),
+    }
 }
 
-/// The saved journey, or `null` if there is none.
+/// The journey in a slot, or `null` if there is none.
 #[tauri::command]
-pub fn load_adventure() -> serde_json::Value {
-    fs::read_to_string(save_path())
+pub fn load_adventure(slot: Option<u8>) -> serde_json::Value {
+    fs::read_to_string(data_dir().join(file_name(slot)))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or(serde_json::Value::Null)
@@ -22,16 +27,30 @@ pub fn load_adventure() -> serde_json::Value {
 /// Save the journey. Writes a temporary file first so a crash never leaves half a save, and
 /// keeps the previous save as `adventure.json.bak`.
 #[tauri::command]
-pub fn save_adventure(save: serde_json::Value) -> Result<(), String> {
+pub fn save_adventure(slot: Option<u8>, save: serde_json::Value) -> Result<(), String> {
     let dir = data_dir();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = save_path();
-    let tmp = dir.join("adventure.json.tmp");
+    let name = file_name(slot);
+    let path = dir.join(&name);
+    let tmp = dir.join(format!("{name}.tmp"));
     fs::write(&tmp, save.to_string()).map_err(|e| e.to_string())?;
     if path.exists() {
-        let _ = fs::copy(&path, dir.join("adventure.json.bak"));
+        let _ = fs::copy(&path, dir.join(format!("{name}.bak")));
     }
     fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+/// Forget the journey in a slot (a copy stays as `.bak`).
+#[tauri::command]
+pub fn delete_adventure(slot: Option<u8>) -> Result<(), String> {
+    let dir = data_dir();
+    let name = file_name(slot);
+    let path = dir.join(&name);
+    if path.exists() {
+        let _ = fs::copy(&path, dir.join(format!("{name}.bak")));
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -1,7 +1,8 @@
 // The overworld: tile maps, walking, people who notice you, and drawing it all.
 
 import worldJson from "./data/world.json";
-import { ANIMATED, TILE, WALKABLE, paintObject, paintTile, personSprite, type Dir } from "./art";
+import { ANIMATED, DETAIL, TILE, WALKABLE, detailTile, paintObject, paintTile, personSprite, type Dir } from "./art";
+import { drawClouds, drawLight, drawParticles, moodFor, softShadow, type View } from "./atmosphere";
 import { PEOPLE, REAGENTS, SIGILS, hashString } from "./content";
 import type { Place, Save } from "./save";
 
@@ -138,14 +139,19 @@ function build(id: string): Built {
       if (ANIMATED.has(ch)) animated.push([x, y]);
     }
   }
+  // Baked at twice the tile resolution, with half-pixel detail on top (see detailTile).
+  const S = TILE * DETAIL;
   const canvas = document.createElement("canvas");
-  canvas.width = data.w * TILE;
-  canvas.height = data.h * TILE;
+  canvas.width = data.w * S;
+  canvas.height = data.h * S;
   const c = canvas.getContext("2d")!;
+  c.imageSmoothingEnabled = false;
   for (let y = 0; y < data.h; y++) {
     for (let x = 0; x < data.w; x++) {
       const variant = hashString(`${x},${y}`) % 4;
-      c.drawImage(tileCanvas(data.tiles[y][x], data.theme, variant, 0, masks[y][x], under[y][x], inside), x * TILE, y * TILE);
+      const ch = data.tiles[y][x];
+      c.drawImage(tileCanvas(ch, data.theme, variant, 0, masks[y][x], under[y][x], inside), x * S, y * S, S, S);
+      if (!ANIMATED.has(ch)) detailTile(c, ch, x * S, y * S, hashString(`${id}:${x},${y}`), [at(x, y - 1), at(x + 1, y), at(x, y + 1), at(x - 1, y)], under[y][x]);
     }
   }
   const b = { data, canvas, under, masks, animated };
@@ -259,7 +265,7 @@ export class World {
     for (const a of this.actors) {
       const p = PEOPLE[a.id];
       const sight = a.obj.sight ?? 0;
-      if (!p.duel || sight <= 0 || this.save.flags[`beat:${a.id}`]) continue;
+      if (!p.duel || sight <= 0 || this.save.flags[`beat:${a.id}`] || this.save.flags[`wait:${a.id}`]) continue;
       const [dx, dy] = DX[a.dir];
       for (let i = 1; i <= sight; i++) {
         const x = a.x + dx * i;
@@ -392,8 +398,12 @@ export class World {
 
   // ---------------------------------------------------------------- drawing
 
+  private lastDraw = 0;
+
   draw(c: CanvasRenderingContext2D, w: number, h: number, scale: number) {
     const d = this.map.data;
+    const dt = Math.min(0.1, Math.max(0, this.time - this.lastDraw));
+    this.lastDraw = this.time;
     const inside = INSIDE_THEMES.has(d.theme);
     const [mdx, mdy] = this.moving ? DX[this.moving] : [0, 0];
     const ppx = (this.px + mdx * this.progress) * TILE;
@@ -415,7 +425,7 @@ export class World {
     c.fillRect(0, 0, w, h);
     c.scale(scale, scale);
     c.translate(-camX, -camY);
-    c.drawImage(this.map.canvas, 0, 0);
+    c.drawImage(this.map.canvas, 0, 0, mw, mh);
 
     const x0 = Math.floor(camX / TILE) - 1;
     const y0 = Math.floor(camY / TILE) - 1;
@@ -427,6 +437,23 @@ export class World {
       const variant = hashString(`${x},${y}`) % 4;
       c.drawImage(tileCanvas(d.tiles[y][x], d.theme, variant, frame, this.map.masks[y][x], this.map.under[y][x], inside), x * TILE, y * TILE);
     }
+
+    // Light and shade: what glows, and the mood of where you are.
+    const mood = moodFor(d.theme, this.mapId === "overworld" ? this.region()?.id ?? null : null);
+    const glows: [string, number, number][] = [];
+    const shadowTiles: [number, number][] = [];
+    for (let y = Math.max(0, y0); y <= Math.min(d.h - 1, y1); y++) {
+      const row = d.tiles[y];
+      for (let x = Math.max(0, x0); x <= Math.min(d.w - 1, x1); x++) {
+        const ch = row[x];
+        if (ch === "L" || ch === "Y" || ch === "x" || ch === "E" || (ch === "N" && mood.dark > 0.3)) glows.push([ch, x * TILE + 8, y * TILE + 8]);
+        else if (ch === "T" || ch === "P" || ch === "r") shadowTiles.push([x, y]);
+      }
+    }
+    const lights: [number, number, string, number][] = [];
+    const view: View = { camX, camY, vw, vh, scale, w, h, time: this.time, dt, px: ppx + 8, py: ppy + 8, glows, lights };
+    for (const [x, y] of shadowTiles) softShadow(c, x * TILE + 8, y * TILE + 15.5, 7.5, 2.4, 0.22);
+    drawClouds(c, mood, view);
 
     // Things and people, back to front.
     type Drawable = { y: number; draw: () => void };
@@ -442,6 +469,11 @@ export class World {
         continue;
       }
       const color = o.kind === "reagent" && o.id ? REAGENTS[o.id]?.color : o.kind === "waystone" && o.id === this.save.stone ? "#ffd25a" : undefined;
+      if (o.kind === "cauldron") lights.push([ox + 8, oy + 8, "120,255,140", 40]);
+      else if (o.kind === "waystone") lights.push([ox + 8, oy + 6, o.id === this.save.stone ? "255,210,90" : "140,200,255", 30]);
+      else if (o.kind === "reagent") lights.push([ox + 8, oy + 8, "255,230,160", 22]);
+      else if (o.kind === "gate") lights.push([ox + 8, oy + 8, "190,140,255", 18 + lit * 8]);
+      if (o.kind !== "sign" && o.kind !== "gate") list.push({ y: oy - 0.1, draw: () => softShadow(c, ox + 8, oy + 14.5, 6, 2, 0.22) });
       list.push({ y: oy, draw: () => paintObject(c, o.kind, ox, oy, this.time, { color, chest: o.chest, lit, theme: d.theme }) });
     }
     for (const a of this.actors) {
@@ -461,9 +493,8 @@ export class World {
             c.fill();
             c.globalAlpha = 1;
           }
-          c.fillStyle = "#00000033";
-          c.fillRect(ax + 4, ay + 14, 8, 2);
-          c.drawImage(personSprite(p.look, a.dir, walking ? Math.floor(this.time * 8) % 2 : 0), ax, ay - 1);
+          softShadow(c, ax + 8, ay + 14.8, 6, 2.2, 0.3);
+          c.drawImage(personSprite(p.look, a.dir, walking ? Math.floor(this.time * 8) % 2 : 0), ax, ay - 1, TILE, TILE);
           if (a.alert > 0) {
             // "!" over their head.
             c.fillStyle = "#ffffff";
@@ -481,20 +512,23 @@ export class World {
     list.push({
       y: ppy,
       draw: () => {
-        c.fillStyle = "#00000033";
-        c.fillRect(ppx + 4, ppy + 14, 8, 2);
-        c.drawImage(personSprite(look, this.dir, pf ? 1 : 0), ppx, ppy - 1 - (pf ? 1 : 0));
+        softShadow(c, ppx + 8, ppy + 14.8, 6, 2.2, 0.3);
+        c.drawImage(personSprite(look, this.dir, pf ? 1 : 0), ppx, ppy - 1 - (pf ? 1 : 0), TILE, TILE);
       },
     });
     list.sort((a, b) => a.y - b.y);
     for (const it of list) it.draw();
+    drawParticles(c, mood, view);
     c.restore();
+    drawLight(c, mood, view);
   }
 
   playerLook() {
-    return { skin: "#f0c8a0", hair: "#5a3a22", cloth: "#d9573b", accent: "#f5e6a8", extra: "cap" as const, extraColor: "#2e6fb7" };
+    return PLAYER_LOOK;
   }
 }
+
+export const PLAYER_LOOK = { skin: "#f0c8a0", hair: "#5a3a22", cloth: "#d9573b", accent: "#f5e6a8", extra: "cap" as const, extraColor: "#2e6fb7" };
 
 export function sigilColor(id: string) {
   return SIGILS[id]?.color ?? "#ffffff";
