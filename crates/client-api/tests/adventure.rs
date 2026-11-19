@@ -84,12 +84,14 @@ fn an_adventure_duel_plays_to_the_end() {
                 deck: d(a),
                 ai: None,
                 life: None,
+                skill: None,
             },
             SeatSpec {
                 name: b.into(),
                 deck: d(b),
                 ai: Some(Personality::Controlling),
                 life: Some(30),
+                skill: None,
             },
         ];
         let mut s = Session::new_game_with(seed, seats, 20);

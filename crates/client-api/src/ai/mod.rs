@@ -92,6 +92,8 @@ pub struct Brain {
     seen_attacks: HashSet<(u32, ObjectId)>,
     seen_stack: HashSet<ObjectId>,
     last_decay_turn: u32,
+    /// 1.0 plays its best; lower widens the window of "good enough" plays it picks among.
+    skill: f32,
     rng: ChaCha8Rng,
 }
 
@@ -110,8 +112,16 @@ impl Brain {
             seen_attacks: HashSet::new(),
             seen_stack: HashSet::new(),
             last_decay_turn: 0,
+            skill: 1.0,
             rng: ChaCha8Rng::seed_from_u64(seed ^ (me.0 as u64).wrapping_mul(0x9E37_79B9)),
         }
+    }
+
+    /// Play less than perfectly: at skill 0 it picks among plays up to several points worse
+    /// than its best, so it misses attacks, wastes removal and makes clumsy blocks.
+    pub fn with_skill(mut self, skill: f32) -> Brain {
+        self.skill = skill.clamp(0.0, 1.0);
+        self
     }
 
     pub fn grudge(&self, p: PlayerId) -> f32 {
@@ -167,7 +177,7 @@ impl Brain {
         }
         opts.sort_by(|a, b| b.score.total_cmp(&a.score));
         let best = opts[0].score;
-        let noise = self.personality.noise();
+        let noise = self.personality.noise() + (1.0 - self.skill) * 4.0;
         let close = opts.iter().take_while(|o| best - o.score <= noise).count();
         let pick = self.rng.gen_range(0..close);
         Some(opts.swap_remove(pick))
