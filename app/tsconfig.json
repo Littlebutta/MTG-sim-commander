@@ -11,7 +11,8 @@
     "isolatedModules": true,
     "allowJs": false,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "resolveJsonModule": true
   },
   "include": ["src"]
 }

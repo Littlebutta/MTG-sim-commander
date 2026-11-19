@@ -1068,7 +1068,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       {(trigs.length > 1 || (trigs.length === 1 && startedTrigger.current === triggerKey)) && mode.kind === "idle" && <TriggerModal view={view} onDone={startTriggers} />}
       {kind === "AssignCombatDamage" && view.your_decision && <DamageModal key={JSON.stringify(view.decision)} view={view} act={act} onHover={setHover} />}
       {kind === "Discard" && view.your_decision && <DiscardModal view={view} act={act} onHover={setHover} />}
-      {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} />}
+      {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} label={session.exitLabel} />}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

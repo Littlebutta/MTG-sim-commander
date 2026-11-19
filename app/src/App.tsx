@@ -10,8 +10,9 @@ import { SetupScreen } from "./ui/SetupScreen";
 import { Table } from "./ui/Table";
 import { OnlineScreen } from "./ui/OnlineScreen";
 import { listenSteam, onLobby } from "./online";
+import { AdventureScreen } from "./adventure/AdventureScreen";
 
-type Screen = "menu" | "decks" | "setup" | "settings" | "builder" | "online";
+type Screen = "menu" | "decks" | "setup" | "settings" | "builder" | "online" | "adventure";
 
 function CardData({ status }: { status: CardStatus | null }) {
   if (!status) return null;
@@ -56,6 +57,7 @@ export function App() {
 
   if (session) return <Table session={session} onExit={() => setSession(null)} />;
   if (screen === "online") return <OnlineScreen onBack={() => setScreen("menu")} onStart={(s) => { setScreen("menu"); setSession(s); }} />;
+  if (screen === "adventure") return <AdventureScreen onExit={() => setScreen("menu")} />;
   if (screen === "builder") return <BuilderScreen onBack={() => setScreen("menu")} />;
   if (screen === "decks") return <DeckScreen onBack={() => setScreen("menu")} />;
   if (screen === "settings") return <SettingsScreen onBack={() => setScreen("menu")} />;
@@ -87,6 +89,7 @@ export function App() {
         <div className="menu-section">
           <button className="btn btn-primary big" onClick={() => setScreen("setup")}>New game</button>
           <button className="btn big" onClick={() => setScreen("online")}>Play with friends</button>
+          <button className="btn big" onClick={() => setScreen("adventure")}>Adventure</button>
           <button className="btn big" onClick={() => setScreen("builder")}>Deck builder</button>
           <button className="btn big" onClick={() => setScreen("decks")}>Decks</button>
           <button className="btn big" onClick={() => setScreen("settings")}>Table &amp; cards</button>

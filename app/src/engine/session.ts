@@ -26,6 +26,8 @@ export interface GameSession {
   subscribe?(cb: (error?: string) => void): () => void;
   /** Online games: leave the lobby when you leave the table. */
   leave?(): void;
+  /** What the button that leaves a finished game says (adventure duels return to the road). */
+  exitLabel?: string;
 }
 
 export interface RewindPoint {
@@ -48,6 +50,8 @@ export interface SeatSpec {
   name: string;
   deck: ResolvedDeck;
   ai: Personality | null;
+  /** Starting life for this seat, when it differs from the game's. */
+  life?: number | null;
 }
 
 let ready: Promise<unknown> | null = null;
@@ -92,6 +96,14 @@ export async function startGame(seats: SeatSpec[], opts: { rewind?: boolean } = 
   const s = WasmSession.from_seats(BigInt(seed), JSON.stringify(seats));
   s.set_rewind(opts.rewind ?? true);
   return wrap(s, opts.rewind ?? true);
+}
+
+/** An adventure duel: no commanders, 20 life (or the seat's own life total). */
+export async function startAdventureGame(seats: SeatSpec[], seed = Date.now()): Promise<GameSession> {
+  await engineReady();
+  const s = WasmSession.adventure(BigInt(seed), JSON.stringify(seats));
+  s.set_rewind(true);
+  return { ...wrap(s, true), exitLabel: "Return to the road" };
 }
 
 /** The raw engine for a game, for the online host to wrap. */

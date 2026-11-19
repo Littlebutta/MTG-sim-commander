@@ -1,6 +1,7 @@
 //! Desktop shell for Commander Table: window, self-update, card data, saved decks, and (next)
 //! Steam networking.
 
+mod adventure;
 mod art;
 mod cards;
 mod decks;
@@ -236,7 +237,11 @@ pub fn run() {
             steam_invite,
             steam_join,
             steam_leave,
-            steam_send
+            steam_send,
+            adventure::load_adventure,
+            adventure::save_adventure,
+            adventure::check_adventure_deck,
+            adventure::resolve_adventure_deck
         ])
         .run(tauri::generate_context!())
         .expect("error while running Commander Table");

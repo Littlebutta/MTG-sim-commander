@@ -5,6 +5,7 @@
 //! game the host runs the session and sends each player only their own view, so hidden
 //! information (hands, libraries) never leaves the host.
 
+pub mod adventure;
 pub mod ai;
 mod bot;
 pub mod builder;
@@ -24,11 +25,17 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 const STARTER_CARDS: &str = include_str!("../data/starter-cards.json");
+const ADVENTURE_CARDS: &str = include_str!("../data/adventure-cards.json");
 
-/// The small built-in card pool used for practice games before real card data is downloaded.
+/// The small built-in card pool used for practice games before real card data is downloaded:
+/// the starter decks' cards plus the extra cards adventure mode hands out.
 pub fn starter_cards() -> Vec<CardRecord> {
-    let file: AtomicFile = serde_json::from_str(STARTER_CARDS).expect("starter card file parses");
-    convert_all(&file)
+    let mut cards = Vec::new();
+    for src in [STARTER_CARDS, ADVENTURE_CARDS] {
+        let file: AtomicFile = serde_json::from_str(src).expect("built-in card file parses");
+        cards.extend(convert_all(&file));
+    }
+    cards
 }
 
 /// The built-in decks, as decklist text in the same format players paste in. Each is a legal
@@ -335,6 +342,9 @@ pub struct SeatSpec {
     pub deck: ResolvedDeck,
     /// `None` for a person; otherwise the computer player's style.
     pub ai: Option<Personality>,
+    /// Starting life for this seat, when it differs from the game's (adventure bosses).
+    #[serde(default)]
+    pub life: Option<i32>,
 }
 
 /// A bot action that has been decided but not yet played, so the UI can show it "thinking".
@@ -378,6 +388,11 @@ pub struct Session {
 impl Session {
     /// Build a game from seats. Seat 0 is the local player.
     pub fn new_game(seed: u64, seats: Vec<SeatSpec>) -> Session {
+        Session::new_game_with(seed, seats, GameConfig::default().starting_life)
+    }
+
+    /// Build a game from seats with a different starting life total (adventure duels use 20).
+    pub fn new_game_with(seed: u64, seats: Vec<SeatSpec>, starting_life: i32) -> Session {
         let decks: Vec<DeckSpec> = seats
             .iter()
             .map(|s| DeckSpec {
@@ -391,10 +406,17 @@ impl Session {
                 seed,
                 starting_player: None,
                 skip_mulligans: false,
+                starting_life,
                 ..Default::default()
             },
             decks,
         );
+        let mut game = game;
+        for (i, s) in seats.iter().enumerate() {
+            if let Some(life) = s.life {
+                game.players[i].life = life;
+            }
+        }
         let brains = seats
             .iter()
             .enumerate()
@@ -427,6 +449,7 @@ impl Session {
                         name: "You".into(),
                         deck,
                         ai: None,
+                        life: None,
                     }
                 } else {
                     let n = names.remove(rng.gen_range(0..names.len()));
@@ -434,6 +457,7 @@ impl Session {
                         name: n.into(),
                         deck,
                         ai: Some(Personality::ALL[rng.gen_range(0..3)]),
+                        life: None,
                     }
                 }
             })

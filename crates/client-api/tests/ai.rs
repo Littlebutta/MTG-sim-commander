@@ -205,6 +205,7 @@ fn ai_vs_basic(seed: u64, ai: usize) -> bool {
                 name: format!("seat {i}"),
                 deck: resolve_deck(name, text, &index).unwrap(),
                 ai: (i == ai).then_some(Personality::Balanced),
+                life: None,
             }
         })
         .collect();

@@ -1,0 +1,2451 @@
+{
+ "meta": {
+  "date": "2026-11-19",
+  "version": "adventure"
+ },
+ "data": {
+  "Wastes": [
+   {
+    "name": "Wastes",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Land"
+    ],
+    "supertypes": [
+     "Basic"
+    ],
+    "subtypes": [],
+    "text": "{T}: Add {C}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    }
+   }
+  ],
+  "Field Creeper": [
+   {
+    "name": "Field Creeper",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Scarecrow"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Phyrexian Walker": [
+   {
+    "name": "Phyrexian Walker",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Construct"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{0}",
+    "power": "0",
+    "toughness": "3"
+   }
+  ],
+  "Steel Wall": [
+   {
+    "name": "Steel Wall",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wall"
+    ],
+    "text": "Defender",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "0",
+    "toughness": "4"
+   }
+  ],
+  "Wall of Spears": [
+   {
+    "name": "Wall of Spears",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wall"
+    ],
+    "text": "Defender\nFirst strike",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "2",
+    "toughness": "3"
+   }
+  ],
+  "Razorfield Thresher": [
+   {
+    "name": "Razorfield Thresher",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Construct"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{7}",
+    "power": "6",
+    "toughness": "4"
+   }
+  ],
+  "Hexplate Golem": [
+   {
+    "name": "Hexplate Golem",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Golem"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{7}",
+    "power": "5",
+    "toughness": "7"
+   }
+  ],
+  "Phyrexian Hulk": [
+   {
+    "name": "Phyrexian Hulk",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Golem"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{6}",
+    "power": "5",
+    "toughness": "4"
+   }
+  ],
+  "Prizefighter Construct": [
+   {
+    "name": "Prizefighter Construct",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Construct"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{5}",
+    "power": "6",
+    "toughness": "2"
+   }
+  ],
+  "Gold-Forged Sentinel": [
+   {
+    "name": "Gold-Forged Sentinel",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Chimera"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{6}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Guardian Automaton": [
+   {
+    "name": "Guardian Automaton",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Construct"
+    ],
+    "text": "When this creature dies, you gain 3 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Skyscanner": [
+   {
+    "name": "Skyscanner",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Thopter"
+    ],
+    "text": "Flying\nWhen this creature enters, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Pierce Strider": [
+   {
+    "name": "Pierce Strider",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Construct"
+    ],
+    "text": "When this creature enters, target opponent loses 3 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Perilous Myr": [
+   {
+    "name": "Perilous Myr",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Myr"
+    ],
+    "text": "When this creature dies, it deals 2 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Bottle Gnomes": [
+   {
+    "name": "Bottle Gnomes",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Gnome"
+    ],
+    "text": "Sacrifice this creature: You gain 3 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "1",
+    "toughness": "3"
+   }
+  ],
+  "Alloy Myr": [
+   {
+    "name": "Alloy Myr",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Myr"
+    ],
+    "text": "{T}: Add one mana of any color.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Darksteel Myr": [
+   {
+    "name": "Darksteel Myr",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Myr"
+    ],
+    "text": "Indestructible",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "0",
+    "toughness": "1"
+   }
+  ],
+  "Filigree Familiar": [
+   {
+    "name": "Filigree Familiar",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Fox"
+    ],
+    "text": "When this creature enters, you gain 2 life.\nWhen this creature dies, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Ornithopter of Paradise": [
+   {
+    "name": "Ornithopter of Paradise",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Thopter"
+    ],
+    "text": "Flying\n{T}: Add one mana of any color.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Moonglove Extract": [
+   {
+    "name": "Moonglove Extract",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Sacrifice this artifact: It deals 2 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}"
+   }
+  ],
+  "Rod of Ruin": [
+   {
+    "name": "Rod of Ruin",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "{3}, {T}: This artifact deals 1 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}"
+   }
+  ],
+  "Millstone": [
+   {
+    "name": "Millstone",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "{2}, {T}: Target player mills two cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}"
+   }
+  ],
+  "Meteorite": [
+   {
+    "name": "Meteorite",
+    "layout": "normal",
+    "colors": [],
+    "colorIdentity": [],
+    "types": [
+     "Artifact"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "When this artifact enters, it deals 2 damage to any target.\n{T}: Add one mana of any color.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{5}"
+   }
+  ],
+  "Cloudkin Seer": [
+   {
+    "name": "Cloudkin Seer",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elemental",
+     "Wizard"
+    ],
+    "text": "Flying\nWhen this creature enters, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Prodigal Sorcerer": [
+   {
+    "name": "Prodigal Sorcerer",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Wizard"
+    ],
+    "text": "{T}: This creature deals 1 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Scroll Thief": [
+   {
+    "name": "Scroll Thief",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Merfolk",
+     "Rogue"
+    ],
+    "text": "Whenever this creature deals combat damage to a player, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "1",
+    "toughness": "3"
+   }
+  ],
+  "Thieving Magpie": [
+   {
+    "name": "Thieving Magpie",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Bird"
+    ],
+    "text": "Flying\nWhenever this creature deals combat damage to a player, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}{U}",
+    "power": "1",
+    "toughness": "3"
+   }
+  ],
+  "Talrand's Invocation": [
+   {
+    "name": "Talrand's Invocation",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Create two 2/2 blue Drake creature tokens with flying.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}{U}"
+   }
+  ],
+  "Exclude": [
+   {
+    "name": "Exclude",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Counter target creature spell.\nDraw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}"
+   }
+  ],
+  "Remove Soul": [
+   {
+    "name": "Remove Soul",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Counter target creature spell.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{U}"
+   }
+  ],
+  "Boomerang": [
+   {
+    "name": "Boomerang",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Return target permanent to its owner's hand.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}{U}"
+   }
+  ],
+  "Giant Octopus": [
+   {
+    "name": "Giant Octopus",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Octopus"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{U}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Tolarian Scholar": [
+   {
+    "name": "Tolarian Scholar",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Wizard"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}",
+    "power": "2",
+    "toughness": "3"
+   }
+  ],
+  "Benthic Giant": [
+   {
+    "name": "Benthic Giant",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Giant"
+    ],
+    "text": "Hexproof",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{5}{U}",
+    "power": "4",
+    "toughness": "5"
+   }
+  ],
+  "Spectral Sailor": [
+   {
+    "name": "Spectral Sailor",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Spirit",
+     "Pirate"
+    ],
+    "text": "Flash\nFlying\n{3}{U}: Draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Fortress Crab": [
+   {
+    "name": "Fortress Crab",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Crab"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{U}",
+    "power": "1",
+    "toughness": "6"
+   }
+  ],
+  "Aven Fisher": [
+   {
+    "name": "Aven Fisher",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Bird",
+     "Soldier"
+    ],
+    "text": "Flying\nWhen this creature dies, you may draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{U}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Tome Scour": [
+   {
+    "name": "Tome Scour",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target player mills five cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}"
+   }
+  ],
+  "Mind Sculpt": [
+   {
+    "name": "Mind Sculpt",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target opponent mills seven cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{U}"
+   }
+  ],
+  "Mist Raven": [
+   {
+    "name": "Mist Raven",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Bird"
+    ],
+    "text": "Flying\nWhen this creature enters, return target creature to its owner's hand.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}{U}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Jace's Ingenuity": [
+   {
+    "name": "Jace's Ingenuity",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Draw three cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{U}{U}"
+   }
+  ],
+  "Opportunity": [
+   {
+    "name": "Opportunity",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target player draws four cards.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{U}{U}"
+   }
+  ],
+  "Lumengrid Warden": [
+   {
+    "name": "Lumengrid Warden",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Wizard"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{U}",
+    "power": "1",
+    "toughness": "3"
+   }
+  ],
+  "Kraken Hatchling": [
+   {
+    "name": "Kraken Hatchling",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Kraken"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}",
+    "power": "0",
+    "toughness": "4"
+   }
+  ],
+  "Zephyr Sprite": [
+   {
+    "name": "Zephyr Sprite",
+    "layout": "normal",
+    "colors": [
+     "U"
+    ],
+    "colorIdentity": [
+     "U"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Faerie"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Pelakka Wurm": [
+   {
+    "name": "Pelakka Wurm",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wurm"
+    ],
+    "text": "Trample\nWhen this creature enters, you gain 7 life.\nWhen this creature dies, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{G}{G}{G}",
+    "power": "7",
+    "toughness": "7"
+   }
+  ],
+  "Ancient Brontodon": [
+   {
+    "name": "Ancient Brontodon",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Dinosaur"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{6}{G}{G}",
+    "power": "9",
+    "toughness": "9"
+   }
+  ],
+  "Vastwood Gorger": [
+   {
+    "name": "Vastwood Gorger",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wurm"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{5}{G}",
+    "power": "5",
+    "toughness": "6"
+   }
+  ],
+  "Sentinel Spider": [
+   {
+    "name": "Sentinel Spider",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Spider"
+    ],
+    "text": "Vigilance\nReach",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{G}{G}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Mammoth Spider": [
+   {
+    "name": "Mammoth Spider",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Spider"
+    ],
+    "text": "Reach",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{G}",
+    "power": "3",
+    "toughness": "5"
+   }
+  ],
+  "Monstrous Growth": [
+   {
+    "name": "Monstrous Growth",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +4/+4 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}"
+   }
+  ],
+  "Thornweald Archer": [
+   {
+    "name": "Thornweald Archer",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elf",
+     "Archer"
+    ],
+    "text": "Reach\nDeathtouch",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Gigantosaurus": [
+   {
+    "name": "Gigantosaurus",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Dinosaur"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}{G}{G}{G}{G}",
+    "power": "10",
+    "toughness": "10"
+   }
+  ],
+  "Jade Mage": [
+   {
+    "name": "Jade Mage",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Shaman"
+    ],
+    "text": "{2}{G}: Create a 1/1 green Saproling creature token.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}{G}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Sprout": [
+   {
+    "name": "Sprout",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Create a 1/1 green Saproling creature token.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}"
+   }
+  ],
+  "Thrashing Brontodon": [
+   {
+    "name": "Thrashing Brontodon",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Dinosaur"
+    ],
+    "text": "{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}{G}",
+    "power": "3",
+    "toughness": "4"
+   }
+  ],
+  "Kavu Climber": [
+   {
+    "name": "Kavu Climber",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Kavu"
+    ],
+    "text": "When this creature enters, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{G}{G}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Vine Trellis": [
+   {
+    "name": "Vine Trellis",
+    "layout": "normal",
+    "colors": [
+     "G"
+    ],
+    "colorIdentity": [
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Plant",
+     "Wall"
+    ],
+    "text": "Defender\n{T}: Add {G}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{G}",
+    "power": "0",
+    "toughness": "4"
+   }
+  ],
+  "Mighty Leap": [
+   {
+    "name": "Mighty Leap",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +2/+2 and gains flying until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}"
+   }
+  ],
+  "Moment of Heroism": [
+   {
+    "name": "Moment of Heroism",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +2/+2 and gains lifelink until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}"
+   }
+  ],
+  "Dawnstrike Paladin": [
+   {
+    "name": "Dawnstrike Paladin",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Knight"
+    ],
+    "text": "Vigilance\nLifelink",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{W}{W}",
+    "power": "2",
+    "toughness": "4"
+   }
+  ],
+  "Nyx-Fleece Ram": [
+   {
+    "name": "Nyx-Fleece Ram",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Sheep"
+    ],
+    "text": "At the beginning of your upkeep, you gain 1 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}",
+    "power": "0",
+    "toughness": "5"
+   }
+  ],
+  "Soul Warden": [
+   {
+    "name": "Soul Warden",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Cleric"
+    ],
+    "text": "Whenever another creature enters, you gain 1 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{W}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Zetalpa, Primal Dawn": [
+   {
+    "name": "Zetalpa, Primal Dawn",
+    "layout": "normal",
+    "colors": [
+     "W"
+    ],
+    "colorIdentity": [
+     "W"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [
+     "Legendary"
+    ],
+    "subtypes": [
+     "Elder",
+     "Dinosaur"
+    ],
+    "text": "Flying, double strike, vigilance, trample, indestructible",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{6}{W}{W}",
+    "power": "4",
+    "toughness": "8",
+    "leadershipSkills": {
+     "brawl": false,
+     "commander": true,
+     "oathbreaker": false
+    }
+   }
+  ],
+  "Zombify": [
+   {
+    "name": "Zombify",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Return target creature card from your graveyard to the battlefield.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{B}"
+   }
+  ],
+  "Painful Lesson": [
+   {
+    "name": "Painful Lesson",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target player draws two cards and loses 2 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{B}"
+   }
+  ],
+  "Blood Pact": [
+   {
+    "name": "Blood Pact",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target player draws two cards and loses 2 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{B}"
+   }
+  ],
+  "Deathbloom Thallid": [
+   {
+    "name": "Deathbloom Thallid",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Fungus"
+    ],
+    "text": "When this creature dies, create a 1/1 green Saproling creature token.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{B}",
+    "power": "3",
+    "toughness": "2"
+   }
+  ],
+  "Phyrexian Gargantua": [
+   {
+    "name": "Phyrexian Gargantua",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Phyrexian",
+     "Horror"
+    ],
+    "text": "When this creature enters, you draw two cards and you lose 2 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{4}{B}{B}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Shambling Goblin": [
+   {
+    "name": "Shambling Goblin",
+    "layout": "normal",
+    "colors": [
+     "B"
+    ],
+    "colorIdentity": [
+     "B"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Zombie",
+     "Goblin"
+    ],
+    "text": "When this creature dies, target creature an opponent controls gets -1/-1 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{B}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Ember Hauler": [
+   {
+    "name": "Ember Hauler",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Goblin"
+    ],
+    "text": "{1}, Sacrifice this creature: It deals 2 damage to any target.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}{R}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Thunder Strike": [
+   {
+    "name": "Thunder Strike",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Target creature gets +2/+0 and gains first strike until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{R}"
+   }
+  ],
+  "Kiln Fiend": [
+   {
+    "name": "Kiln Fiend",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elemental",
+     "Beast"
+    ],
+    "text": "Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{R}",
+    "power": "0",
+    "toughness": "6"
+   }
+  ],
+  "Guttersnipe": [
+   {
+    "name": "Guttersnipe",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Goblin",
+     "Shaman"
+    ],
+    "text": "Whenever you cast an instant or sorcery spell, this creature deals 2 damage to each opponent.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{R}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Goblin Fireslinger": [
+   {
+    "name": "Goblin Fireslinger",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Goblin",
+     "Warrior"
+    ],
+    "text": "{T}: This creature deals 1 damage to target player.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Bogardan Firefiend": [
+   {
+    "name": "Bogardan Firefiend",
+    "layout": "normal",
+    "colors": [
+     "R"
+    ],
+    "colorIdentity": [
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Elemental",
+     "Spirit"
+    ],
+    "text": "When this creature dies, it deals 2 damage to target creature.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{2}{R}",
+    "power": "2",
+    "toughness": "1"
+   }
+  ],
+  "Watchwolf": [
+   {
+    "name": "Watchwolf",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "G"
+    ],
+    "colorIdentity": [
+     "W",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Wolf"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}{W}",
+    "power": "3",
+    "toughness": "3"
+   }
+  ],
+  "Woolly Thoctar": [
+   {
+    "name": "Woolly Thoctar",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "R",
+     "G"
+    ],
+    "colorIdentity": [
+     "W",
+     "R",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Beast"
+    ],
+    "text": "",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}{G}{W}",
+    "power": "5",
+    "toughness": "4"
+   }
+  ],
+  "Boros Swiftblade": [
+   {
+    "name": "Boros Swiftblade",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "R"
+    ],
+    "colorIdentity": [
+     "W",
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Soldier"
+    ],
+    "text": "Double strike",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}{W}",
+    "power": "1",
+    "toughness": "2"
+   }
+  ],
+  "Skyknight Legionnaire": [
+   {
+    "name": "Skyknight Legionnaire",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "R"
+    ],
+    "colorIdentity": [
+     "W",
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Knight"
+    ],
+    "text": "Flying, haste",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{R}{W}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Lightning Helix": [
+   {
+    "name": "Lightning Helix",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "R"
+    ],
+    "colorIdentity": [
+     "W",
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Lightning Helix deals 3 damage to any target and you gain 3 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}{W}"
+   }
+  ],
+  "Terminate": [
+   {
+    "name": "Terminate",
+    "layout": "normal",
+    "colors": [
+     "B",
+     "R"
+    ],
+    "colorIdentity": [
+     "B",
+     "R"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Destroy target creature. It can't be regenerated.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{B}{R}"
+   }
+  ],
+  "Putrefy": [
+   {
+    "name": "Putrefy",
+    "layout": "normal",
+    "colors": [
+     "B",
+     "G"
+    ],
+    "colorIdentity": [
+     "B",
+     "G"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Destroy target artifact or creature. It can't be regenerated.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{B}{G}"
+   }
+  ],
+  "Vindicate": [
+   {
+    "name": "Vindicate",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "B"
+    ],
+    "colorIdentity": [
+     "W",
+     "B"
+    ],
+    "types": [
+     "Sorcery"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Destroy target permanent.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}{B}"
+   }
+  ],
+  "Absorb": [
+   {
+    "name": "Absorb",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "U"
+    ],
+    "colorIdentity": [
+     "W",
+     "U"
+    ],
+    "types": [
+     "Instant"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Counter target spell. You gain 3 life.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{W}{U}{U}"
+   }
+  ],
+  "Baleful Strix": [
+   {
+    "name": "Baleful Strix",
+    "layout": "normal",
+    "colors": [
+     "U",
+     "B"
+    ],
+    "colorIdentity": [
+     "U",
+     "B"
+    ],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Bird"
+    ],
+    "text": "Flying, deathtouch\nWhen this creature enters, draw a card.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{U}{B}",
+    "power": "1",
+    "toughness": "1"
+   }
+  ],
+  "Rhox War Monk": [
+   {
+    "name": "Rhox War Monk",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "U",
+     "G"
+    ],
+    "colorIdentity": [
+     "W",
+     "U",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Rhino",
+     "Monk"
+    ],
+    "text": "Lifelink",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}{W}{U}",
+    "power": "3",
+    "toughness": "4"
+   }
+  ],
+  "Lightning Angel": [
+   {
+    "name": "Lightning Angel",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "U",
+     "R"
+    ],
+    "colorIdentity": [
+     "W",
+     "U",
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Angel"
+    ],
+    "text": "Flying, vigilance, haste",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{R}{W}{U}",
+    "power": "3",
+    "toughness": "4"
+   }
+  ],
+  "Fires of Yavimaya": [
+   {
+    "name": "Fires of Yavimaya",
+    "layout": "normal",
+    "colors": [
+     "R",
+     "G"
+    ],
+    "colorIdentity": [
+     "R",
+     "G"
+    ],
+    "types": [
+     "Enchantment"
+    ],
+    "supertypes": [],
+    "subtypes": [],
+    "text": "Creatures you control have haste.\nSacrifice this enchantment: Target creature gets +2/+2 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{R}{G}"
+   }
+  ],
+  "Wee Dragonauts": [
+   {
+    "name": "Wee Dragonauts",
+    "layout": "normal",
+    "colors": [
+     "U",
+     "R"
+    ],
+    "colorIdentity": [
+     "U",
+     "R"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Faerie",
+     "Wizard"
+    ],
+    "text": "Flying\nWhenever you cast an instant or sorcery spell, this creature gets +2/+0 until end of turn.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{U}{R}",
+    "power": "1",
+    "toughness": "3"
+   }
+  ],
+  "Broodmate Dragon": [
+   {
+    "name": "Broodmate Dragon",
+    "layout": "normal",
+    "colors": [
+     "B",
+     "R",
+     "G"
+    ],
+    "colorIdentity": [
+     "B",
+     "R",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Dragon"
+    ],
+    "text": "Flying\nWhen this creature enters, create a 4/4 red Dragon creature token with flying.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{3}{B}{R}{G}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Tower Gargoyle": [
+   {
+    "name": "Tower Gargoyle",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "U",
+     "B"
+    ],
+    "colorIdentity": [
+     "W",
+     "U",
+     "B"
+    ],
+    "types": [
+     "Artifact",
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Gargoyle"
+    ],
+    "text": "Flying",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{1}{W}{U}{B}",
+    "power": "4",
+    "toughness": "4"
+   }
+  ],
+  "Steward of Valeron": [
+   {
+    "name": "Steward of Valeron",
+    "layout": "normal",
+    "colors": [
+     "W",
+     "G"
+    ],
+    "colorIdentity": [
+     "W",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Druid",
+     "Knight"
+    ],
+    "text": "Vigilance\n{T}: Add {G}.",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{G}{W}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ],
+  "Rip-Clan Crasher": [
+   {
+    "name": "Rip-Clan Crasher",
+    "layout": "normal",
+    "colors": [
+     "R",
+     "G"
+    ],
+    "colorIdentity": [
+     "R",
+     "G"
+    ],
+    "types": [
+     "Creature"
+    ],
+    "supertypes": [],
+    "subtypes": [
+     "Human",
+     "Warrior"
+    ],
+    "text": "Haste",
+    "keywords": [],
+    "legalities": {
+     "commander": "Legal"
+    },
+    "manaCost": "{R}{G}",
+    "power": "2",
+    "toughness": "2"
+   }
+  ]
+ }
+}
