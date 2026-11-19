@@ -44,6 +44,55 @@ const OPPOSITE: Record<Dir, Dir> = { up: "down", down: "up", left: "right", righ
 const INSIDE_THEMES = new Set(["shop", "tower"]);
 const GROUND_CHARS = new Set(".,\"hmas:gfcpk".split(""));
 const SOLID_OBJECTS = new Set(["npc", "sign", "waystone", "well", "cauldron", "gate"]);
+/** Open ground a lost card or chest can be left on. */
+const SPOT_CHARS = new Set('."hamgscp,f'.split(""));
+
+/**
+ * Where this journey's lost cards and chests lie. Each one moves to a random open spot it
+ * could already be reached from: in the same region of the overworld, or the same part of a
+ * dungeon (never past a gate, a person or a wall it wasn't already behind). Spots stay clear of
+ * doors, people and signs, don't crowd each other, and don't close off narrow paths.
+ */
+function scatter(mapId: string, data: MapData, seed: number): WorldObject[] {
+  const loot = (o: WorldObject) => o.kind === "card" || o.kind === "reagent";
+  const fixed = data.objects.filter((o) => !loot(o));
+  const key = (x: number, y: number) => y * data.w + x;
+  const solid = new Set(fixed.filter((o) => SOLID_OBJECTS.has(o.kind)).map((o) => key(o.x, o.y)));
+  const walk = (x: number, y: number) => x >= 0 && y >= 0 && x < data.w && y < data.h && WALKABLE.has(data.tiles[y][x]) && !solid.has(key(x, y));
+  // Keep a ring of space around anything you walk into or talk to, and where you arrive.
+  const near = new Set<number>();
+  const ring = (x: number, y: number, r: number) => {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) near.add(key(x + dx, y + dy));
+  };
+  for (const o of fixed) ring(o.x, o.y, o.kind === "warp" ? 2 : 1);
+  for (const m of Object.values(WORLD.maps)) for (const o of m.objects) if (o.kind === "warp" && o.to === mapId && o.tx !== undefined && o.ty !== undefined) ring(o.tx, o.ty, 2);
+  if (WORLD.start.map === mapId) ring(WORLD.start.x, WORLD.start.y, 2);
+  const out = fixed.slice();
+  for (const o of data.objects.filter(loot)) {
+    const home = o.region && WORLD.regions[o.region] ? WORLD.regions[o.region].rect : Object.values(WORLD.regions).find(({ rect: r }) => o.x >= r[0] && o.x < r[2] && o.y >= r[1] && o.y < r[3])?.rect;
+    const rect = mapId === "overworld" ? home : undefined;
+    const inRect = (x: number, y: number) => !rect || (x >= rect[0] && x < rect[2] && y >= rect[1] && y < rect[3]);
+    const seen = new Set([key(o.x, o.y)]);
+    const queue: [number, number][] = [[o.x, o.y]];
+    const spots: [number, number][] = [];
+    for (let i = 0; i < queue.length; i++) {
+      const [x, y] = queue[i];
+      const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => walk(x + dx, y + dy)).length;
+      if (inRect(x, y) && SPOT_CHARS.has(data.tiles[y][x]) && !near.has(key(x, y)) && (o.hidden || open >= 3)) spots.push([x, y]);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (seen.has(key(nx, ny)) || !walk(nx, ny) || !inRect(nx, ny)) continue;
+        seen.add(key(nx, ny));
+        queue.push([nx, ny]);
+      }
+    }
+    const [x, y] = spots.length ? spots[hashString(`${seed}:${mapId}:${o.id}`) % spots.length] : [o.x, o.y];
+    ring(x, y, 2);
+    out.push({ ...o, x, y });
+  }
+  return out;
+}
 
 export type WorldEvent =
   | { type: "interact"; obj: WorldObject }
@@ -182,7 +231,11 @@ export class World {
   approaching: { actor: Actor; path: number; done: () => void } | null = null;
   bump = 0;
 
+  /** Each map's objects, with this journey's lost cards and chests scattered. */
+  private placed = new Map<string, WorldObject[]>();
+
   constructor(public save: Save) {
+    if (save.seed === undefined) save.seed = Math.floor(Math.random() * 2 ** 31);
     this.enter({ map: save.map, x: save.x, y: save.y, dir: save.dir });
   }
 
@@ -205,7 +258,12 @@ export class World {
 
   /** Objects that are still in the world (picked-up cards and reagents are gone). */
   objects(): WorldObject[] {
-    return this.map.data.objects.filter((o) => {
+    let all = this.placed.get(this.mapId);
+    if (!all) {
+      all = scatter(this.mapId, this.map.data, this.save.seed ?? 0);
+      this.placed.set(this.mapId, all);
+    }
+    return all.filter((o) => {
       if ((o.kind === "card" || o.kind === "reagent") && this.save.flags[`got:${this.mapId}:${o.id}`]) return false;
       if (o.kind === "gate" && this.save.flags[`open:${o.id}`]) return false;
       return o.kind !== "npc";

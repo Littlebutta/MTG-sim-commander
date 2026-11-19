@@ -1,6 +1,7 @@
 // Adventure mode's windows: the journal (spellbook, satchel, journey), the cauldron, spoils
 // after a duel, finding things, and the duel introduction.
 
+import type { Challenge } from "./difficulty";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lookupCards, searchCards, type CardSummary } from "../decks";
 import type { CardView } from "../engine/types";
@@ -448,7 +449,7 @@ export function Found({ card, reagent, sigil, onClose }: { card?: string; reagen
 
 // ---------------------------------------------------------------- duel intro
 
-export function DuelIntro({ person, you, onBegin, onFlee }: { person: Person; you: Person["look"]; onBegin: () => void; onFlee?: () => void }) {
+export function DuelIntro({ person, you, challenge, onBegin, onFlee }: { person: Person; you: Person["look"]; challenge: Challenge; onBegin: () => void; onFlee?: () => void }) {
   const d = person.duel!;
   useKeys(["e", "E", " ", "Enter"], onBegin, 600);
   return (
@@ -462,7 +463,7 @@ export function DuelIntro({ person, you, onBegin, onFlee }: { person: Person; yo
         <div className="adv-duel-rank">{d.rank === "boss" ? "One of the old powers" : d.rank === "endgame" ? "The Rift Spire" : "A duelist challenges you"}</div>
         <div className="adv-duel-name">{person.name}{person.title ? <span>, {person.title}</span> : null}</div>
         <div className="adv-duel-theme">{d.theme}</div>
-        {d.life && <div className="adv-duel-life">Starts at {d.life} life</div>}
+        <div className="adv-duel-life"><span className={`adv-level level-${challenge.label.toLowerCase()}`}>{challenge.label}</span> · starts at {challenge.life} life</div>
         <div className="adv-actions center">
           {onFlee && <button className="adv-btn" onClick={onFlee}>Not now</button>}
           <button className="adv-btn primary big" onClick={onBegin}>Duel!</button>

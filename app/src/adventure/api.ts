@@ -30,10 +30,10 @@ export async function resolveAdventureDeck(name: string, text: string): Promise<
   return JSON.parse(resolve_adventure_deck(name, text));
 }
 
-export async function startDuel(you: { name: string; text: string }, them: { name: string; deckName: string; text: string; style: Personality; life?: number }): Promise<GameSession> {
+export async function startDuel(you: { name: string; text: string }, them: { name: string; deckName: string; text: string; style: Personality; life?: number; skill?: number }): Promise<GameSession> {
   const [mine, theirs] = await Promise.all([resolveAdventureDeck(you.name, you.text), resolveAdventureDeck(them.deckName, them.text)]);
   return startAdventureGame([
     { name: "You", deck: mine, ai: null },
-    { name: them.name, deck: theirs, ai: them.style, life: them.life ?? null },
+    { name: them.name, deck: theirs, ai: them.style, life: them.life ?? null, skill: them.skill ?? null },
   ]);
 }

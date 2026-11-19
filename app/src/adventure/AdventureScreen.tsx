@@ -9,6 +9,7 @@ import type { GameSession } from "../engine/session";
 import type { PlayerView } from "../engine/types";
 import { Table } from "../ui/Table";
 import { checkAdventureDeck, startDuel } from "./api";
+import { challengeFor } from "./difficulty";
 import type { Dir } from "./art";
 import { DECKS, PEOPLE, REAGENTS, SIGILS, STARTERS, chaosDeck, isBasic, listText, parseList, type Person } from "./content";
 import { Cauldron, DuelIntro, Found, Journal, Portrait, Spellbook, Spoils } from "./panels";
@@ -182,6 +183,8 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   const [muted, setMuted] = useState(musicMuted());
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [banner, setBanner] = useState<{ key: number; text: string } | null>(null);
+  /** The respawn transition: your vision blurs and darkens, then your eyes open somewhere safe. */
+  const [fade, setFade] = useState<{ phase: "out" | "in"; text?: string } | null>(null);
   const [duel, setDuel] = useState<{ session: GameSession; done: (won: boolean) => void } | null>(null);
   const [, setTick] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -377,11 +380,12 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       return;
     }
     close();
+    const level = challengeFor(p, s);
     let won = false;
     try {
       const session = await startDuel(
         { name: s.deckName, text: listText(s.deck) },
-        { name: p.name, deckName: `${p.name}'s deck`, text: DECKS.duelists[p.duel!.deck], style: p.duel!.style, life: p.duel!.life },
+        { name: p.name, deckName: `${p.name}'s deck`, text: DECKS.duelists[p.duel!.deck], style: p.duel!.style, life: level.life, skill: level.skill },
       );
       won = await new Promise<boolean>((resolve) => setDuel({ session, done: resolve }));
     } catch (e) {
@@ -442,10 +446,17 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
     const s = w.save;
     s.losses++;
     await sayAll(p, p.gloat ?? ["Better luck next time."]);
-    await say(null, s.stone ? "Your vision blurs... You wake beside the touchstone, its hum steady and familiar." : "Your vision blurs... You wake somewhere safe, a little wiser.");
+    close();
+    const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    setFade({ phase: "out", text: "Your vision blurs..." });
+    await wait(2200);
     w.enter(s.respawn);
     persist();
+    setFade({ phase: "in" });
+    await wait(2000);
+    setFade(null);
     setBanner({ key: Date.now(), text: w.region()?.name ?? "" });
+    await say(null, s.stone ? "You wake beside the touchstone, its hum steady and familiar." : "You wake somewhere safe, a little wiser.");
   }
 
   async function brew(w: World) {
@@ -493,7 +504,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         return run(async () => {
           s.flags[`got:${w.mapId}:${o.id}`] = true;
           if (o.kind === "card") {
-            const card = await findCard(`${w.mapId}:${o.id}`, o.region ?? "meadow", !!o.hidden, s.pools ?? []);
+            const card = await findCard(o.region ?? "meadow", !!o.hidden, s.pools ?? []);
             addCard(s, card);
             persist();
             await showFound({ card });
@@ -552,6 +563,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       go: (map: string, x: number, y: number) => worldRef.current?.enter({ map, x, y, dir: "down" }),
       found: (card: string) => run(() => showFound({ card })),
       brew: () => worldRef.current && run(() => brew(worldRef.current!)),
+      defeat: (id: string) => worldRef.current && run(() => defeat(worldRef.current!, id)),
     };
   }
 
@@ -701,7 +713,12 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   const o = overlay;
   return (
     <div className="adv-root">
-      <canvas ref={canvasRef} className="adv-canvas" />
+      <canvas ref={canvasRef} className={`adv-canvas ${fade ? `adv-canvas-${fade.phase}` : ""}`} />
+      {fade && (
+        <div key={fade.phase} className={`adv-fade ${fade.phase}`}>
+          {fade.phase === "in" ? <><div className="adv-lid top" /><div className="adv-lid bottom" /></> : <div className="adv-fade-text">{fade.text}</div>}
+        </div>
+      )}
       {banner && (
         <div key={banner.key} className="adv-banner" onAnimationEnd={() => setBanner(null)}>{banner.text}</div>
       )}
@@ -722,7 +739,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       )}
       {o.kind === "found" && <Found card={o.card} reagent={o.reagent} sigil={o.sigil} onClose={() => { close(); o.resolve(); }} />}
       {o.kind === "spoils" && <Spoils title={o.title} options={o.options} picks={o.picks} onDone={(c) => { close(); o.resolve(c); }} />}
-      {o.kind === "intro" && <DuelIntro person={o.person} you={w.playerLook()} onBegin={() => o.resolve(true)} onFlee={o.canFlee ? () => o.resolve(false) : undefined} />}
+      {o.kind === "intro" && <DuelIntro person={o.person} you={w.playerLook()} challenge={challengeFor(o.person, w.save)} onBegin={() => o.resolve(true)} onFlee={o.canFlee ? () => o.resolve(false) : undefined} />}
       {o.kind === "cauldron" && <Cauldron save={w.save} onBrew={(reagent, card) => { close(); o.resolve({ reagent, card }); }} onClose={() => { close(); o.resolve(null); }} />}
       {o.kind === "journal" && (
         <Journal

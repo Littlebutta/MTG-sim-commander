@@ -345,6 +345,10 @@ pub struct SeatSpec {
     /// Starting life for this seat, when it differs from the game's (adventure bosses).
     #[serde(default)]
     pub life: Option<i32>,
+    /// How well a computer player plays, from 0 (often misplays) to 1 (its best). Adventure
+    /// duels start low and ramp up. `None` plays at its best.
+    #[serde(default)]
+    pub skill: Option<f32>,
 }
 
 /// A bot action that has been decided but not yet played, so the UI can show it "thinking".
@@ -427,7 +431,11 @@ impl Session {
         let brains = seats
             .iter()
             .enumerate()
-            .filter_map(|(i, s)| s.ai.map(|p| Brain::new(PlayerId(i as u8), p, seed)))
+            .filter_map(|(i, s)| {
+                s.ai.map(|p| {
+                    Brain::new(PlayerId(i as u8), p, seed).with_skill(s.skill.unwrap_or(1.0))
+                })
+            })
             .collect();
         Session {
             game,
@@ -457,6 +465,7 @@ impl Session {
                         deck,
                         ai: None,
                         life: None,
+                        skill: None,
                     }
                 } else {
                     let n = names.remove(rng.gen_range(0..names.len()));
@@ -465,6 +474,7 @@ impl Session {
                         deck,
                         ai: Some(Personality::ALL[rng.gen_range(0..3)]),
                         life: None,
+                        skill: None,
                     }
                 }
             })

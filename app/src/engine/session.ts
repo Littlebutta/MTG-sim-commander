@@ -52,6 +52,8 @@ export interface SeatSpec {
   ai: Personality | null;
   /** Starting life for this seat, when it differs from the game's. */
   life?: number | null;
+  /** Computer player's skill, 0 (loose) to 1 (its best). */
+  skill?: number | null;
 }
 
 let ready: Promise<unknown> | null = null;

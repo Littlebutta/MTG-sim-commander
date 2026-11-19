@@ -37,6 +37,10 @@ export interface Save extends Place {
   brews: number;
   /** Which card pools lost cards come from. Missing in older saves: the Vale's own cards. */
   pools?: PoolId[];
+  /** 2 once the default pool became the whole library. */
+  poolsV?: number;
+  /** Seeds where this journey's lost cards and chests lie. */
+  seed?: number;
   created: number;
   saved: number;
 }
@@ -47,6 +51,7 @@ export function newSave(name: string, start: Place): Save {
   return {
     v: 1, name, ...start, respawn: start, stone: null, collection: {}, deck: {}, deckName: "My deck", reagents: {}, sigils: [], flags: {},
     starter: null, seenRegions: [], playtime: 0, wins: 0, losses: 0, brews: 0, created: Date.now(), saved: Date.now(),
+    poolsV: 2, seed: Math.floor(Math.random() * 2 ** 31),
   };
 }
 
@@ -59,8 +64,14 @@ function valid(raw: unknown): Save | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as Save;
   if (s.v !== 1 || typeof s.map !== "string" || !s.deck || !s.collection) return null;
-  // Fill anything an older save is missing.
-  return { ...newSave(s.name ?? "", { map: s.map, x: s.x, y: s.y, dir: s.dir }), ...s };
+  // Fill anything an older save is missing (including a fresh seed for where things lie).
+  const out: Save = { ...newSave(s.name ?? "", { map: s.map, x: s.x, y: s.y, dir: s.dir }), ...s };
+  // Older journeys on the old default (the Vale's hand-picked cards) move to the whole library.
+  if ((s.poolsV ?? 1) < 2) {
+    if (!s.pools?.length || (s.pools.length === 1 && s.pools[0] === "elderreach")) out.pools = ["library"];
+    out.poolsV = 2;
+  }
+  return out;
 }
 
 export async function loadSave(slot: number): Promise<Save | null> {
