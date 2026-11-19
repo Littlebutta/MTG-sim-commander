@@ -126,6 +126,8 @@ pub struct PlayerView {
     pub log: Vec<String>,
     pub hints: Hints,
     pub commander_return: bool,
+    /// The commander a `Decision::CommanderZone` is about.
+    pub commander_question: Option<CardView>,
 }
 
 pub(crate) fn type_names<T: std::fmt::Debug>(v: impl IntoIterator<Item = T>) -> Vec<String> {
@@ -482,5 +484,9 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
         log: g.log.iter().rev().take(60).rev().cloned().collect(),
         hints,
         commander_return: g.player(viewer).return_commander_to_command_zone,
+        commander_question: match g.decision() {
+            Decision::CommanderZone { commander, .. } => cv(commander),
+            _ => None,
+        },
     }
 }

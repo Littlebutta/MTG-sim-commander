@@ -190,6 +190,7 @@ impl Game {
                 commander_casts: HashMap::new(),
                 commander_damage: HashMap::new(),
                 return_commander_to_command_zone: true,
+                ask_commander_zone: false,
                 drew_from_empty_library: false,
                 has_lost: false,
                 has_left: false,
@@ -359,8 +360,14 @@ impl Game {
         controller: Option<PlayerId>,
     ) -> Option<ObjectId> {
         let obj = self.objects.get(&id)?.clone();
+        // A player who wants to be asked answers once the move is done (see
+        // `Decision::CommanderZone`); everyone else uses their standing choice.
+        let ask = matches!(to, Zone::Hand | Zone::Library)
+            && self.is_commander(id)
+            && self.player(obj.owner).ask_commander_zone;
         if matches!(to, Zone::Hand | Zone::Library)
             && self.is_commander(id)
+            && !ask
             && self.player(obj.owner).return_commander_to_command_zone
         {
             to = Zone::Command;
@@ -383,6 +390,9 @@ impl Game {
         let new_id = self.create_object_for_card(obj.def.clone(), obj.card, obj.owner, ctl, to);
         if let Some(o) = self.objects.get_mut(&new_id) {
             o.is_token = obj.is_token;
+            if ask {
+                o.new_in_zone = true;
+            }
         }
         let name = obj.def.name.clone();
         self.log(format!("{name}: {:?} -> {:?}", from, to));

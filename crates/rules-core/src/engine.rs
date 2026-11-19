@@ -52,6 +52,14 @@ pub enum Decision {
         blockers: Vec<(ObjectId, i32)>,
         suggested: Vec<(Target, i32)>,
     },
+    /// Your commander went to a graveyard, exile, your hand or your library: leave it there,
+    /// or put it into the command zone (CR 903.9a–b)? Asked only of players who turned
+    /// asking on; for hand and library the question comes right after the move.
+    CommanderZone {
+        player: PlayerId,
+        commander: ObjectId,
+        zone: Zone,
+    },
     /// Discard down to maximum hand size in cleanup (CR 514.1).
     Discard {
         player: PlayerId,
@@ -71,6 +79,7 @@ impl Decision {
             | Decision::DeclareAttackers { player }
             | Decision::DeclareBlockers { player }
             | Decision::AssignCombatDamage { player, .. }
+            | Decision::CommanderZone { player, .. }
             | Decision::Discard { player, .. } => Some(*player),
             Decision::GameOver { .. } => None,
         }
@@ -117,6 +126,11 @@ pub enum Action {
     Concede,
     /// Standing choice for "may put it into the command zone" (CR 903.9a/b). Allowed any time.
     SetCommanderReturn(bool),
+    /// Ask me each time my commander goes to a graveyard or exile, instead of using the
+    /// standing choice. Allowed any time.
+    SetCommanderAsk(bool),
+    /// Answer to `Decision::CommanderZone`: true moves the commander to the command zone.
+    CommanderToCommandZone(bool),
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -188,6 +202,10 @@ impl Game {
                 self.player_mut(player).return_commander_to_command_zone = b;
                 return Ok(());
             }
+            Action::SetCommanderAsk(b) => {
+                self.player_mut(player).ask_commander_zone = b;
+                return Ok(());
+            }
             _ => {}
         }
         if self.decision.player() != Some(player) {
@@ -252,6 +270,9 @@ impl Game {
             }
             (d @ Decision::AssignCombatDamage { .. }, Action::AssignDamage(split)) => {
                 self.assign_damage(d, split)?
+            }
+            (Decision::CommanderZone { commander, .. }, Action::CommanderToCommandZone(b)) => {
+                self.answer_commander_zone(commander, b)
             }
             (Decision::Discard { count, .. }, Action::Discard(cards)) => {
                 self.cleanup_discard(player, cards, count)?
@@ -521,7 +542,7 @@ impl Game {
         self.version += 1;
         // 514.3a: if SBAs would be performed or triggers are waiting, players get priority.
         let sba = self.perform_sbas();
-        if sba || !self.pending_triggers.is_empty() {
+        if sba || !self.pending_triggers.is_empty() || !self.commander_questions().is_empty() {
             self.stage = Stage::PriorityCheck(self.priority_start_player());
         } else {
             self.stage = Stage::StepEnd;
@@ -611,6 +632,18 @@ impl Game {
     fn check_sba_and_triggers(&mut self) -> bool {
         loop {
             while self.perform_sbas() {}
+            if let Some(id) = self.commander_questions().first().copied() {
+                let o = self.object(id).unwrap();
+                let (player, zone) = (o.owner, o.zone);
+                let cur = self.stage.clone();
+                self.wait(Decision::CommanderZone {
+                    player,
+                    commander: id,
+                    zone,
+                });
+                self.resume_after_triggers = Some(cur);
+                return false;
+            }
             if self.pending_triggers.is_empty() {
                 return true;
             }
@@ -650,6 +683,40 @@ impl Game {
             self.pending_triggers
                 .retain(|t| !gone.contains(&t.controller));
         }
+    }
+
+    /// Commanders that just changed zones and whose owners want to be asked where they go
+    /// (CR 903.9a–b).
+    fn commander_questions(&self) -> Vec<ObjectId> {
+        self.objects
+            .iter()
+            .filter(|(id, o)| {
+                o.new_in_zone
+                    && matches!(
+                        o.zone,
+                        Zone::Graveyard | Zone::Exile | Zone::Hand | Zone::Library
+                    )
+                    && self.is_commander(**id)
+                    && self.in_game(o.owner)
+                    && self.player(o.owner).ask_commander_zone
+            })
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn answer_commander_zone(&mut self, commander: ObjectId, to_command: bool) {
+        if self.objects.contains_key(&commander) {
+            if to_command {
+                self.move_object(commander, Zone::Command, None);
+                self.version += 1;
+            } else if let Some(o) = self.object_mut(commander) {
+                o.new_in_zone = false;
+            }
+        }
+        self.stage = self
+            .resume_after_triggers
+            .take()
+            .unwrap_or(Stage::PriorityCheck(self.priority_start_player()));
     }
 
     /// Pending triggers controlled by `p`, in the order a `PutTriggersOnStack` answer indexes them.
@@ -1676,6 +1743,7 @@ impl Game {
             if o.new_in_zone
                 && matches!(o.zone, Zone::Graveyard | Zone::Exile)
                 && self.is_commander(*id)
+                && !self.player(o.owner).ask_commander_zone
                 && self.player(o.owner).return_commander_to_command_zone
             {
                 to_command.push(*id);
@@ -1742,8 +1810,12 @@ impl Game {
         for p in self.players.iter_mut() {
             p.drew_from_empty_library = false;
         }
-        for o in self.objects.values_mut() {
-            o.new_in_zone = false;
+        // A commander whose owner wants to be asked keeps its flag until they answer.
+        let asking = self.commander_questions();
+        for (id, o) in self.objects.iter_mut() {
+            if !asking.contains(id) {
+                o.new_in_zone = false;
+            }
         }
 
         for p in losers {
@@ -1861,6 +1933,12 @@ impl Game {
                 self.stage = Stage::Damage;
             }
             Decision::Discard { player, .. } if player == p => self.cleanup_rest(),
+            Decision::CommanderZone { player, .. } if player == p => {
+                self.stage = self
+                    .resume_after_triggers
+                    .take()
+                    .unwrap_or(Stage::PriorityCheck(self.priority_start_player()));
+            }
             Decision::PutTriggersOnStack { .. } => {
                 self.stage = self
                     .resume_after_triggers

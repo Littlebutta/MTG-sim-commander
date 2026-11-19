@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Action, AssignDamageDecision, CardView, PlayerView, Target } from "../engine/types";
-import { Card } from "./Card";
+import { Card, CardPreview } from "./Card";
 
 type Act = (a: Action) => void;
 type Hover = (c: CardView | null) => void;
@@ -214,6 +214,40 @@ export function DiscardModal({ view, act, onHover }: { view: PlayerView; act: Ac
         </div>
         <div className="modal-actions">
           <button className="btn btn-primary" disabled={picked.length !== need} onClick={() => act({ Discard: picked })}>Discard</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ZONE_WORDS: Record<string, { where: string; stay: string; how: string }> = {
+  Graveyard: { where: "your graveyard", stay: "Leave it in the graveyard", how: "was put into your graveyard" },
+  Exile: { where: "exile", stay: "Leave it in exile", how: "was exiled" },
+  Hand: { where: "your hand", stay: "Keep it in your hand", how: "was returned to your hand" },
+  Library: { where: "your library", stay: "Leave it in your library", how: "was put into your library" },
+};
+
+/** Your commander changed zones: keep it where it went, or move it to the command zone. */
+export function CommanderModal({ view, act }: { view: PlayerView; act: Act }) {
+  const d = (view.decision as { CommanderZone: { zone: string } }).CommanderZone;
+  const card = view.commander_question;
+  const w = ZONE_WORDS[d.zone] ?? { where: d.zone.toLowerCase(), stay: "Leave it there", how: "changed zones" };
+  const name = card?.name ?? "Your commander";
+  return (
+    <div className="scrim">
+      <div className="modal cmdr-modal">
+        {card && <div className="cmdr-modal-card"><CardPreview card={card} /></div>}
+        <div className="cmdr-modal-body">
+          <h2>{name} {w.how}</h2>
+          <p className="muted">It's your commander, so you choose where it ends up.</p>
+          <button className="choice" onClick={() => act({ CommanderToCommandZone: true })} autoFocus>
+            <strong>Move it to the command zone</strong>
+            <span className="muted small">You can cast it again from there. It costs 2 more mana for each time you've already cast it from the command zone.</span>
+          </button>
+          <button className="choice" onClick={() => act({ CommanderToCommandZone: false })}>
+            <strong>{w.stay}</strong>
+            <span className="muted small">{d.zone === "Hand" ? "You can cast it from your hand for its normal cost." : d.zone === "Library" ? "You may draw it again later." : `It stays in ${w.where}, where cards that bring things back can reach it.`}</span>
+          </button>
         </div>
       </div>
     </div>

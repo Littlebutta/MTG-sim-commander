@@ -7,6 +7,9 @@ import "@fontsource/cinzel/600.css";
 import "@fontsource/cinzel/700.css";
 import "./styles.css";
 import { App } from "./App";
+import { fitToWindow } from "./scale";
+
+fitToWindow();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

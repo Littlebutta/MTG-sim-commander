@@ -417,6 +417,13 @@ impl Session {
                 game.players[i].life = life;
             }
         }
+        // People are asked where their commander goes each time; computer players always
+        // take it back to the command zone.
+        for (i, s) in seats.iter().enumerate() {
+            if s.ai.is_none() {
+                game.player_mut(PlayerId(i as u8)).ask_commander_zone = true;
+            }
+        }
         let brains = seats
             .iter()
             .enumerate()
@@ -482,6 +489,7 @@ impl Session {
         if self.brains.iter().any(|b| b.me == player) {
             return;
         }
+        self.game.player_mut(player).ask_commander_zone = false;
         let mut b = Brain::new(player, personality, 0x5eed ^ player.0 as u64);
         b.observe(&self.game);
         self.brains.push(b);
