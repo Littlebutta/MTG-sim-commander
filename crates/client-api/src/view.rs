@@ -101,6 +101,8 @@ pub struct Hints {
     pub activatable: Vec<(u32, usize)>,
     pub attackers: Vec<u32>,
     pub blockers: Vec<u32>,
+    /// For each of your possible blockers, the attackers it may block (flying and reach).
+    pub block_options: Vec<(u32, Vec<u32>)>,
     /// For each castable card / activatable ability: the legal choices per target slot.
     pub cast_targets: BTreeMap<u32, Vec<Vec<Target>>>,
     pub ability_targets: BTreeMap<String, Vec<Vec<Target>>>,
@@ -451,6 +453,23 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
         },
         blockers: if matches!(decision, Decision::DeclareBlockers { player } if player == viewer) {
             g.possible_blockers(viewer).iter().map(|i| i.0).collect()
+        } else {
+            vec![]
+        },
+        block_options: if matches!(decision, Decision::DeclareBlockers { player } if player == viewer)
+        {
+            g.possible_blockers(viewer)
+                .iter()
+                .map(|b| {
+                    (
+                        b.0,
+                        g.blockable_attackers(viewer, *b)
+                            .iter()
+                            .map(|a| a.0)
+                            .collect(),
+                    )
+                })
+                .collect()
         } else {
             vec![]
         },

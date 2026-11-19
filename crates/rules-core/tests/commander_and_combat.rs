@@ -470,3 +470,97 @@ fn owner_is_asked_when_a_commander_is_returned_to_hand_and_can_keep_it_there() {
     assert_eq!(g.object(commander_of(&g, P0)).unwrap().zone, Zone::Hand);
     assert!(matches!(g.decision(), Decision::Priority { .. }));
 }
+
+#[test]
+fn only_flying_or_reach_can_block_a_flyer() {
+    let mut g = game(2);
+    let bird = put(&mut g, P0, flyer("Bird", 1, 1));
+    let bear = put(&mut g, P1, bears());
+    let spider = put(&mut g, P1, with_keyword("Spider", 1, 3, Keyword::Reach));
+    let hawk = put(&mut g, P1, flyer("Hawk", 1, 1));
+    attack(&mut g, vec![(bird, P1)]);
+    pass_until_decision(&mut g, |d| matches!(d, Decision::DeclareBlockers { .. }));
+    assert!(g.blockable_attackers(P1, bear).is_empty());
+    assert_eq!(g.blockable_attackers(P1, spider), vec![bird]);
+    assert_eq!(g.blockable_attackers(P1, hawk), vec![bird]);
+    assert!(g.submit(P1, Action::Block(vec![(bear, bird)])).is_err());
+    // A double block doesn't sneak a ground creature in either.
+    assert!(g
+        .submit(P1, Action::Block(vec![(spider, bird), (bear, bird)]))
+        .is_err());
+    g.submit(P1, Action::Block(vec![(spider, bird)])).unwrap();
+}
+
+fn graveyard_spell(name: &str, f: Filter, effect: Effect) -> std::sync::Arc<CardDef> {
+    CardBuilder::new(name)
+        .cost("{B}")
+        .types(&[CardType::Sorcery])
+        .spell(vec![TargetSpec::CardInGraveyard(f)], vec![effect])
+        .build()
+}
+
+#[test]
+fn spells_can_target_cards_in_any_graveyard() {
+    let mut g = game(2);
+    let mine = g.debug_create(bears(), P0, Zone::Graveyard);
+    let theirs = g.debug_create(vanilla("Ogre", 3, 3), P1, Zone::Graveyard);
+    pass_until(&mut g, Step::Main1);
+
+    // "your graveyard" sees only your own cards; "a graveyard" sees both.
+    let raise = in_hand(
+        &mut g,
+        P0,
+        graveyard_spell(
+            "Raise",
+            Filter::creatures().yours(),
+            Effect::ReturnFromGraveyardToHand { target: 0 },
+        ),
+    );
+    let spec = TargetSpec::CardInGraveyard(Filter::creatures().yours());
+    assert_eq!(
+        g.legal_targets(P0, Some(raise), &spec),
+        vec![Target::Object(mine)]
+    );
+    let any = TargetSpec::CardInGraveyard(Filter::creatures());
+    assert_eq!(g.legal_targets(P0, Some(raise), &any).len(), 2);
+
+    add_mana(&mut g, P0, "B");
+    cast(&mut g, P0, raise, vec![Target::Object(mine)]);
+    resolve_all(&mut g);
+    assert!(g
+        .hand(P0)
+        .iter()
+        .any(|id| g.object(*id).unwrap().def.name == "Grizzly Bears"));
+
+    // Reanimate an opponent's creature under your control.
+    let rean = in_hand(
+        &mut g,
+        P0,
+        graveyard_spell(
+            "Reanimate",
+            Filter::creatures(),
+            Effect::ReturnFromGraveyardToBattlefield { target: 0 },
+        ),
+    );
+    add_mana(&mut g, P0, "B");
+    cast(&mut g, P0, rean, vec![Target::Object(theirs)]);
+    resolve_all(&mut g);
+    let view = g.view();
+    assert!(g.battlefield.iter().any(|id| {
+        let o = g.object(*id).unwrap();
+        o.def.name == "Ogre" && o.owner == P1 && view.get(*id).unwrap().controller == P0
+    }));
+
+    // Exile a card straight out of a graveyard.
+    let dead = g.debug_create(bears(), P1, Zone::Graveyard);
+    let purge = in_hand(
+        &mut g,
+        P0,
+        graveyard_spell("Purge", Filter::default(), Effect::Exile { target: 0 }),
+    );
+    add_mana(&mut g, P0, "B");
+    cast(&mut g, P0, purge, vec![Target::Object(dead)]);
+    resolve_all(&mut g);
+    assert!(g.player(P1).graveyard.is_empty());
+    assert_eq!(g.exile.len(), 1);
+}

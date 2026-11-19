@@ -376,8 +376,10 @@ button { font: inherit; color: inherit; }
 .pool .pip { width: 20px; height: 20px; font-size: 11px; }
 
 /* preview */
-.preview-wrap { position: absolute; left: 22px; top: 50%; transform: translateY(-50%); z-index: 70; pointer-events: none; }
-.preview-wrap.right { left: auto; right: 22px; }
+/* Near the middle of the table, never out at the edge of an ultrawide screen: at 16:9 this is
+   the left margin, and on wider windows it stays the same distance from the center. */
+.preview-wrap { position: absolute; left: max(22px, calc(50 * var(--vw) - 778px)); top: 50%; transform: translateY(-50%); z-index: 70; pointer-events: none; }
+.preview-wrap.right { left: auto; right: max(22px, calc(50 * var(--vw) - 778px)); }
 .preview {
   --frame: var(--mana-C);
   --frame-deep: #4b4f57;
@@ -1060,3 +1062,43 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 .board-me.three-rows .row-slots { min-height: calc(var(--card-w) * 1.4 + 8px); }
 .table.drag-arrange .board-me .cell-c { min-width: 24%; }
 .cmdr-modal .preview { position: static; transform: none; }
+
+/* ------------------------------------------------------------------ blocks, hand counts, graveyards */
+
+.card.is-blocking, .card.is-blocked { box-shadow: 0 0 0 2px #b48cff, 0 0 18px rgba(180, 140, 255, 0.55); }
+.card.is-blocking .card-tag, .card.is-blocked .card-tag { background: #2b1d4a; border-color: #b48cff; color: #e9dcff; font-weight: 600; }
+.card.is-blocking .badge-blk { background: #b48cff; color: #1a1026; }
+.card.is-attacking:not(.is-blocked) .card-tag { border-color: var(--danger); }
+
+.hand-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 99px; font-weight: 700; font-size: 12px;
+  color: var(--text); background: rgba(120, 170, 255, 0.14); border: 1px solid rgba(120, 170, 255, 0.45); white-space: nowrap; vertical-align: middle;
+}
+.hand-pill.big { font-size: 16px; padding: 2px 10px 2px 8px; }
+.hand-pill.empty { opacity: 0.55; }
+.hand-pill-word { font-weight: 500; font-size: 10px; color: var(--muted); }
+.hand-pill:not(.big) .hand-pill-word { display: none; }
+.hand-fan { display: inline-flex; align-items: flex-end; height: 14px; padding-left: 3px; }
+.hand-fan i { display: block; width: 8px; height: 12px; margin-left: -4px; border-radius: 2px; background: linear-gradient(160deg, #6f8fd8, #2c3f7a); border: 1px solid rgba(255, 255, 255, 0.55); transform-origin: 50% 100%; }
+.hand-fan i:nth-child(1) { transform: rotate(-16deg); } .hand-fan i:nth-child(2) { transform: rotate(-8deg); } .hand-fan i:nth-child(3) { transform: rotate(0deg); }
+.hand-fan i:nth-child(4) { transform: rotate(8deg); } .hand-fan i:nth-child(5) { transform: rotate(16deg); }
+.hand-pill.big .hand-fan { height: 17px; } .hand-pill.big .hand-fan i { width: 10px; height: 15px; }
+
+.gy-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.gy-link:hover { color: var(--text); }
+.gy-panel {
+  position: absolute; left: 50%; bottom: calc(var(--hand-w) * 1.05 + 70px); transform: translateX(-50%); z-index: 45;
+  width: min(880px, calc(70 * var(--vw))); max-height: calc(46 * var(--vh)); display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border-radius: 14px; background: rgba(18, 12, 26, 0.96); border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7); animation: stack-in 140ms ease-out;
+}
+.gy-panel.targeting { border-color: #ffd166; }
+.gy-head { display: flex; align-items: center; gap: 10px; }
+.gy-head .gy-title { font: 700 15px var(--serif); letter-spacing: 0.03em; }
+.gy-head .ghost:last-child { margin-left: auto; }
+.gy-head .ghost.on { border-color: var(--accent); color: var(--text); }
+.gy-hint { font-size: 12px; color: #ffd166; }
+.gy-cards { display: flex; flex-wrap: wrap; gap: 8px; overflow-y: auto; padding: 6px 2px 2px; --card-w: 78px; }
+.gy-cards .card.tapped { transform: none; filter: none; margin: 0; }
+/* A tapped card is turned on its side; keep its label reading left to right, above it. */
+.card.tapped .card-tag { left: -16px; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); }

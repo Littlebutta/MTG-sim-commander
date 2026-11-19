@@ -7,6 +7,7 @@ import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
 import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
 import { CommanderModal, DamageModal, DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
 import { play, playChanges } from "../sound";
+import { uiScale } from "../scale";
 import { ArrowLayer, anchorEl, elementAtPointer, type ArrowSpec } from "./Arrows";
 
 type Mode =
@@ -104,6 +105,19 @@ function LifePill({ life, big }: { life: number; big?: boolean }) {
   );
 }
 
+/** How many cards a player is holding: a little fan of card backs with the number on it. */
+function HandPill({ count, big }: { count: number; big?: boolean }) {
+  return (
+    <span className={`hand-pill ${big ? "big" : ""} ${count === 0 ? "empty" : ""}`} title={`${count} card${count === 1 ? "" : "s"} in hand`}>
+      <span className="hand-fan" aria-hidden>
+        {Array.from({ length: Math.min(Math.max(count, 1), 5) }, (_, i) => <i key={i} />)}
+      </span>
+      <span className="bump" key={count}>{count}</span>
+      <span className="hand-pill-word">in hand</span>
+    </span>
+  );
+}
+
 /** A player's command zone, framed and labeled so it can't be mistaken for the battlefield. */
 function CommandZone({ cards, onHover, onInspect, mine, castable, onCast }: {
   cards: CardView[]; onHover: (c: CardView | null) => void; onInspect: (c: CardView) => void;
@@ -188,6 +202,10 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const [arranged, setArranged] = useState<Partial<Record<Slot, number[]>>>({});
   // Your hand, in the order you've dragged it into. New cards join on the right.
   const [handOrder, setHandOrder] = useState<number[]>([]);
+  // Graveyards: hover a pile to peek, click to keep it open. Opens by itself when a spell
+  // you're casting can target a card in one.
+  const [gyOpen, setGyOpen] = useState<number | null>(null);
+  const [gyPeek, setGyPeek] = useState<number | null>(null);
   const settings = useSettings();
   const toggleQuiet = (name: string) => {
     const next = new Set(quiet);
@@ -413,6 +431,19 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const isChosen = (t: Target) => mode.kind === "target" && mode.chosen.some((x) => sameTarget(x, t));
   const pickable = (t: Target) => isTargetable(t) || isChosen(t);
   const targetsReady = mode.kind === "target" && mode.chosen.length === mode.slots.length;
+  // Players whose graveyards hold something the current choice can target.
+  const gyTargetOwners = currentSlot
+    ? view.players.filter((p) => p.graveyard.some((c) => isTargetable({ Object: c.id }))).map((p) => p.id)
+    : [];
+  const [gyDismissed, setGyDismissed] = useState(false);
+  const gyKey = gyTargetOwners.join(",");
+  useEffect(() => {
+    setGyDismissed(false);
+    if (gyKey) setGyOpen((cur) => (cur !== null && gyKey.split(",").map(Number).includes(cur) ? cur : Number(gyKey.split(",").find((id) => Number(id) === view.you) ?? gyKey.split(",")[0])));
+    else setGyOpen(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gyKey]);
+  const gyShown = gyOpen !== null && !(gyDismissed && gyKey) ? gyOpen : gyPeek;
   const chooseTarget = (t: Target) => {
     if (mode.kind !== "target") return;
     const i = mode.chosen.findIndex((x) => sameTarget(x, t));
@@ -513,6 +544,17 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     else if (view.hints.castable.includes(c.id)) beginCast(c);
   };
 
+  // Which attackers a blocker may block (a creature without flying or reach can't block a flyer).
+  const canBlock = (blocker: number, attacker: number) => {
+    const opts = view.hints.block_options?.find(([b]) => b === blocker);
+    return !opts || opts[1].includes(attacker);
+  };
+  const whyNoBlock = (blocker: number, attacker: number) => {
+    const b = view.battlefield.find((c) => c.id === blocker);
+    const a = view.battlefield.find((c) => c.id === attacker);
+    return `${b?.name ?? "That creature"} can't block ${a?.name ?? "it"}: ${a?.keywords.includes("Flying") ? "it has flying, so only creatures with flying or reach can block it" : "that block isn't allowed"}.`;
+  };
+
   const clickPermanent = (c: CardView) => {
     if (mode.kind === "target") {
       chooseTarget({ Object: c.id });
@@ -539,6 +581,11 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         return;
       }
       if (pickedBlocker !== null && c.attacking === view.you) {
+        if (!canBlock(pickedBlocker, c.id)) {
+          setToast(whyNoBlock(pickedBlocker, c.id));
+          play("error");
+          return;
+        }
         setBlocks(new Map(blocks).set(pickedBlocker, c.id));
         setPickedBlocker(null);
       }
@@ -556,7 +603,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (pickedBlocker === c.id) return "selected";
     if (view.your_decision && kind === "DeclareAttackers" && view.hints.attackers.includes(c.id)) return "play";
     if (view.your_decision && kind === "DeclareBlockers" && view.hints.blockers.includes(c.id)) return "play";
-    if (view.your_decision && kind === "DeclareBlockers" && pickedBlocker !== null && c.attacking === view.you) return "target";
+    if (view.your_decision && kind === "DeclareBlockers" && pickedBlocker !== null && c.attacking === view.you) return canBlock(pickedBlocker, c.id) ? "target" : null;
     if (c.abilities.some((a) => a.activatable && !a.is_mana)) return "play";
     return null;
   };
@@ -616,7 +663,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (k === "block") {
       const o = objAt(el);
       const att = o && view.battlefield.find((c) => c.id === o.id && c.attacking === view.you);
-      return o && att ? { el: o.el, target: { Object: o.id } } : null;
+      return o && att && canBlock(id, o.id) ? { el: o.el, target: { Object: o.id } } : null;
     }
     const first = view.hints.cast_targets[id]?.[0];
     if (!first) return null;
@@ -660,6 +707,12 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         if (hit && "Object" in hit.target) {
           setBlocks(new Map(blocks).set(drag.id, hit.target.Object));
           setPickedBlocker(null);
+        } else {
+          const over = objAt(el);
+          if (over && view.battlefield.some((c) => c.id === over.id && c.attacking === view.you) && !canBlock(drag.id, over.id)) {
+            setToast(whyNoBlock(drag.id, over.id));
+            play("error");
+          }
         }
       } else {
         // Dropped back on the hand: move it there.
@@ -698,6 +751,10 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const arrows: ArrowSpec[] = [];
   for (const c of view.battlefield) {
     if (c.attacking !== null && !attacks.has(c.id)) arrows.push({ key: `in${c.id}`, from: { obj: c.id }, to: { player: c.attacking }, tone: "incoming" });
+  }
+  // Blocks that have been declared, by anyone: a shield-colored arrow from blocker to attacker.
+  for (const c of view.battlefield) {
+    if (c.blocking !== null && !blocks.has(c.id)) arrows.push({ key: `bk${c.id}`, from: { obj: c.id }, to: { obj: c.blocking }, tone: "block" });
   }
   for (const [a, p] of attacks) arrows.push({ key: `at${a}`, from: { obj: a }, to: { player: p }, tone: "attack" });
   for (const [b, a] of blocks) arrows.push({ key: `bl${b}`, from: { obj: b }, to: { obj: a }, tone: "block" });
@@ -753,13 +810,21 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (view.hints.undo_mana.includes(c.id) && mode.kind === "idle") return "↺ click to untap";
     if (attacks.has(c.id)) return `→ ${view.players[attacks.get(c.id)!].name}`;
     if (blocks.has(c.id)) return `blocks ${view.battlefield.find((b) => b.id === blocks.get(c.id))?.name ?? ""}`;
+    if (c.blocking !== null) return `⛨ blocks ${view.battlefield.find((b) => b.id === c.blocking)?.name ?? ""}`;
+    if (c.attacking !== null) {
+      const by = view.battlefield.filter((b) => b.blocking === c.id);
+      if (by.length) return `⛨ blocked by ${by.map((b) => b.name).join(", ")}`;
+      if (c.controller === view.you && (view.step === "DeclareBlockers" || view.step === "FirstStrikeDamage" || view.step === "CombatDamage")) return "unblocked";
+    }
     if (c.attacking !== null && c.controller !== view.you) return `→ ${view.players[c.attacking].name}`;
     return null;
   };
+  const blockedIds = new Set(view.battlefield.filter((c) => c.blocking !== null).map((c) => c.blocking!));
+  const combatCls = (c: CardView) => (c.blocking !== null ? "is-blocking" : blockedIds.has(c.id) ? "is-blocked" : "");
   const renderRow = (cards: CardView[], cls: string) => (
     <div className={`row ${cls}`}>
       {cards.map((c) => (
-        <Card key={c.id} card={c} size="field" glow={glowFor(c)} onClick={() => clickPermanent(c)} onHover={setHover} onInspect={setInspect} badge={tagFor(c)} />
+        <Card key={c.id} card={c} size="field" className={combatCls(c)} glow={glowFor(c)} onClick={() => clickPermanent(c)} onHover={setHover} onInspect={setInspect} badge={tagFor(c)} />
       ))}
     </div>
   );
@@ -820,6 +885,14 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     return null;
   })();
 
+  // The hover preview sits just left of the middle of the table (not at the far edge of a wide
+  // screen) and hops to the right when the pointer is where it would appear.
+  const previewSide = () => {
+    const x = pointerX.current / uiScale();
+    const mid = window.innerWidth / uiScale() / 2;
+    return x > mid - 830 && x < mid - 420 ? "right" : "";
+  };
+
   const topIsTarget = (t: Target) => mode.kind === "target" && isTargetable(t);
   const playerCls = (id: number) => (topIsTarget({ Player: id }) ? "glow-target" : isChosen({ Player: id }) ? "glow-chosen" : "");
 
@@ -842,7 +915,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
             <Sigil seat={p} size={28} />
             <span className="seat-name">{p.name}</span>
             <LifePill life={p.life} />
-            <span className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : `${p.hand_count} in hand · ${p.library_count} in library`}</span>
+            <span className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <><HandPill count={p.hand_count} /> · {p.library_count} in library</>}</span>
             {me.commander_damage[p.command[0]?.name ?? ""] !== undefined && (
               <span className="seat-cmd" title="Commander damage you've taken from them">⚔ {me.commander_damage[p.command[0]?.name ?? ""]}</span>
             )}
@@ -879,10 +952,11 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
                     <div className="opp-name-row">
                       <span className="seat-name">{p.name}</span>
                       <LifePill life={p.life} big />
+                      <HandPill count={p.hand_count} big />
                       {p.is_active && <span className="turn-chip">Their turn</span>}
                       {p.id === focused.id && kind === "DeclareAttackers" && view.your_decision && <span className="muted small">attack target</span>}
                     </div>
-                    <div className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <><span className="bump" key={p.hand_count}>{p.hand_count}</span> in hand · {p.library_count} library · {p.graveyard.length} graveyard</>}</div>
+                    <div className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <>{p.library_count} library · <button className="gy-link" onClick={(e) => { e.stopPropagation(); setGyOpen(gyOpen === p.id ? null : p.id); }} onMouseEnter={() => p.graveyard.length > 0 && setGyPeek(p.id)} onMouseLeave={() => setGyPeek(null)}>{p.graveyard.length} graveyard</button></>}</div>
                   </div>
                   <CommandZone cards={p.command} onHover={setHover} onInspect={setInspect} />
                 </div>
@@ -897,12 +971,14 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         <div className="focus-id">
           <span className="seat-name">{focused.name}</span>
           <LifePill life={focused.life} big />
+          <HandPill count={focused.hand_count} big />
           {focused.is_active && <span className="turn-chip">Their turn</span>}
         </div>
         <Medallion seat={focused} position="top" targetable={pickable({ Player: focused.id })} onClick={() => pickable({ Player: focused.id }) && chooseTarget({ Player: focused.id })} />
         <div className="opp-side">
           <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{focused.library_count}</div>
-          <div className="pile pile-gy" title="Graveyard">{focused.graveyard.length}</div>
+          <div className="pile pile-gy clickable" title="Graveyard: hover to look, click to keep it open" data-player-gy={focused.id}
+            onClick={() => setGyOpen(gyOpen === focused.id ? null : focused.id)} onMouseEnter={() => focused.graveyard.length > 0 && setGyPeek(focused.id)} onMouseLeave={() => setGyPeek(null)}>{focused.graveyard.length}</div>
           <CommandZone cards={focused.command} onHover={setHover} onInspect={setInspect} />
         </div>
         {renderRow([...opp.lands, ...opp.support], "row-back")}
@@ -932,7 +1008,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
                 <div key={c} className={`cell cell-${c}`} data-slot={slot}>
                   <span className="cell-label">{SLOT_NAMES[slot]}</span>
                   {mySlots[slot].map((card) => (
-                    <Card key={card.id} card={card} size="field" glow={glowFor(card)} onClick={() => clickPermanent(card)} onHover={setHover} onInspect={setInspect} badge={tagFor(card)} />
+                    <Card key={card.id} card={card} size="field" className={combatCls(card)} glow={glowFor(card)} onClick={() => clickPermanent(card)} onHover={setHover} onInspect={setInspect} badge={tagFor(card)} />
                   ))}
                 </div>
               );
@@ -964,7 +1040,8 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         <div className="dock-right">
           <div className="piles">
             <div className={`pile ${backClass(settings)}`} style={backStyle(settings)} title="Library">{me.library_count}<small>Library</small></div>
-            <div className="pile pile-gy" title="Graveyard">{me.graveyard.length}<small>Graveyard</small></div>
+            <div className="pile pile-gy clickable" title="Graveyard: hover to look, click to keep it open"
+              onClick={() => setGyOpen(gyOpen === me.id ? null : me.id)} onMouseEnter={() => me.graveyard.length > 0 && setGyPeek(me.id)} onMouseLeave={() => setGyPeek(null)}>{me.graveyard.length}<small>Graveyard</small></div>
           </div>
           <div className="actions">
             <div className="status">{status}</div>
@@ -1075,6 +1152,34 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
             </label>
           ) : null} />
       )}
+      {gyShown !== null && (() => {
+        const owner = view.players[gyShown];
+        const cards = [...owner.graveyard].reverse();
+        const targeting = gyTargetOwners.includes(gyShown);
+        return (
+          <aside className={`gy-panel ${targeting ? "targeting" : ""}`} onMouseEnter={() => setGyPeek(gyShown)} onMouseLeave={() => setGyPeek(null)}>
+            <div className="gy-head">
+              <span className="gy-title">{owner.is_you ? "Your graveyard" : `${owner.name}'s graveyard`}</span>
+              <span className="muted small">{cards.length} card{cards.length === 1 ? "" : "s"}, newest first</span>
+              {gyTargetOwners.length > 1 && gyTargetOwners.map((id) => (
+                <button key={id} className={`ghost small ${id === gyShown ? "on" : ""}`} onClick={() => setGyOpen(id)}>{view.players[id].name}</button>
+              ))}
+              <button className="ghost" onClick={() => { setGyOpen(null); setGyPeek(null); setGyDismissed(true); }} title="Close">✕</button>
+            </div>
+            {targeting && <div className="gy-hint">Click a glowing card to choose it.</div>}
+            <div className="gy-cards">
+              {cards.length === 0 && <span className="muted small">Empty.</span>}
+              {cards.map((c) => (
+                <Card key={c.id} card={c} size="field"
+                  glow={isChosen({ Object: c.id }) ? "selected" : isTargetable({ Object: c.id }) ? "target" : null}
+                  dim={mode.kind === "target" && !pickable({ Object: c.id })}
+                  onClick={pickable({ Object: c.id }) ? () => chooseTarget({ Object: c.id }) : undefined}
+                  onHover={setHover} onInspect={setInspect} />
+              ))}
+            </div>
+          </aside>
+        );
+      })()}
       {popItem && popItem.card && (
         <div className="cast-pop" key={popItem.id} onClick={() => setCastPop({ id: popItem.id, closed: true })} title="Click to dismiss">
           <div className="cast-pop-head">
@@ -1087,7 +1192,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       )}
 
       {/* Hover preview */}
-      {hover && !drag && <div className={`preview-wrap ${pointerX.current < window.innerWidth * 0.4 ? "right" : ""}`}><CardPreview card={hover} /></div>}
+      {hover && !drag && <div className={`preview-wrap ${previewSide()}`}><CardPreview card={hover} /></div>}
 
       {/* Ability menu */}
       {mode.kind === "abilities" && (
