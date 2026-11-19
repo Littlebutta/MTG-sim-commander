@@ -37,6 +37,8 @@ export interface Save extends Place {
   brews: number;
   /** Which card pools lost cards come from. Missing in older saves: the Vale's own cards. */
   pools?: PoolId[];
+  /** Only find cards the duels fully run. */
+  playableOnly?: boolean;
   /** 2 once the default pool became the whole library. */
   poolsV?: number;
   /** 2 once the overworld grew by a quarter (positions saved before then are scaled). */

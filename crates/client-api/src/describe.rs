@@ -51,7 +51,7 @@ pub fn describe_effect(e: &Effect) -> String {
             .iter()
             .map(|m| match m {
                 Modification::ModifyPT(p, t) => format!("{p:+}/{t:+} until end of turn"),
-                Modification::AddKeyword(k) => format!("gains {k:?}"),
+                Modification::AddKeyword(k) => format!("gains {}", k.label()),
                 other => format!("{other:?}"),
             })
             .collect::<Vec<_>>()
@@ -62,6 +62,20 @@ pub fn describe_effect(e: &Effect) -> String {
         }
         Effect::ReturnFromGraveyardToHand { .. } => "Return target card to hand".into(),
         Effect::Sacrifice { .. } => "Sacrifice".into(),
+        Effect::Attach { .. } => "Attach to target creature".into(),
+        Effect::Scry { amount } => format!("Scry {}", amt(amount)),
+        Effect::Surveil { amount } => format!("Surveil {}", amt(amount)),
+        Effect::SearchLibrary { count, .. } => {
+            format!("Search your library for {} card(s)", count)
+        }
+        Effect::AddCountersEach { amount, .. } => {
+            format!("Put {} +1/+1 counter(s) on each", amt(amount))
+        }
+        Effect::Discard { who: w, amount } => format!("{} discard {}", who(w), amt(amount)),
+        Effect::Fight { .. } => "Fight target creature".into(),
+        Effect::ControllerOfTargetGainsLifeEqualToPower { .. } => {
+            "Its controller gains life equal to its power".into()
+        }
     }
 }
 
@@ -86,17 +100,27 @@ fn cost(c: &Cost) -> String {
     if c.pay_life > 0 {
         parts.push(format!("Pay {} life", c.pay_life));
     }
+    if let Some(l) = c.loyalty {
+        parts.push(if l > 0 {
+            format!("+{l}")
+        } else {
+            l.to_string()
+        });
+    }
     parts.join(", ")
 }
 
 pub fn describe_ability(a: &Ability) -> String {
     match a {
-        Ability::Keyword(k) => format!("{k:?}"),
+        Ability::Keyword(k) => k.label(),
         Ability::Mana { cost: c, produces } => {
             let what = match produces {
                 ManaProduction::Fixed(v) => v.iter().map(mana).collect::<String>(),
                 ManaProduction::OneOf(v) => v.iter().map(mana).collect::<Vec<_>>().join(" or "),
                 ManaProduction::AnyColor => "one mana of any color".into(),
+                ManaProduction::CommanderIdentity => {
+                    "one mana of any color in your commander's color identity".into()
+                }
             };
             format!("{}: Add {}", cost(c), what)
         }
@@ -106,6 +130,11 @@ pub fn describe_ability(a: &Ability) -> String {
         Ability::Triggered { effects, .. } => describe_effects(effects),
         Ability::Static { .. } => "Static ability".into(),
         Ability::CharacteristicPT { .. } => "Power/toughness ability".into(),
+        Ability::EntersTapped => "Enters tapped".into(),
+        Ability::EntersWithCounters { amount, .. } => {
+            format!("Enters with {} +1/+1 counter(s)", amt(amount))
+        }
+        Ability::NoMaxHandSize => "No maximum hand size".into(),
         Ability::Unsupported(t) => t.clone(),
     }
 }

@@ -206,11 +206,11 @@ function Journey({ save }: { save: Save }) {
 function Pools({ save, onChange }: { save: Save; onChange: () => void }) {
   const on = save.pools?.length ? save.pools : DEFAULT_POOLS;
   const [size, setSize] = useState<number | null>(null);
-  const key = on.join(",");
+  const key = on.join(",") + (save.playableOnly ? "+playable" : "");
   useEffect(() => {
     let live = true;
     setSize(null);
-    poolSize(on).then((n) => live && setSize(n)).catch(() => {});
+    poolSize(on, !!save.playableOnly).then((n) => live && setSize(n)).catch(() => {});
     return () => {
       live = false;
     };
@@ -237,6 +237,13 @@ function Pools({ save, onChange }: { save: Save; onChange: () => void }) {
           </label>
         ))}
       </div>
+      <label className={`adv-pool ${save.playableOnly ? "on" : ""}`}>
+        <input type="checkbox" checked={!!save.playableOnly} onChange={() => { save.playableOnly = !save.playableOnly; onChange(); }} />
+        <span>
+          <strong>Only cards that fully work in duels</strong>
+          <span className="adv-muted">Skip cards whose rules text the game can't run yet, so everything you find can be played as printed.</span>
+        </span>
+      </label>
       <p className="adv-muted small">{size === null ? "Counting cards…" : `${size.toLocaleString()} different cards to find.`}</p>
     </div>
   );

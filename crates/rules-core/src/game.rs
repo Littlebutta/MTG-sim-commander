@@ -1,9 +1,9 @@
 //! The `Game` struct, Commander game setup (CR 903.6–903.7) and zone changes (CR 400).
 
-use crate::card::{CardDef, CounterKind};
+use crate::card::{Ability, Amount, CardDef, CardType, CounterKind};
 use crate::ids::{CardId, ObjectId, PlayerId, Timestamp};
 use crate::layers::View;
-use crate::mana::ManaPool;
+use crate::mana::{ColorSet, ManaPool};
 use crate::state::*;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
@@ -323,10 +323,14 @@ impl Game {
                 attached_to: None,
                 is_token,
                 new_in_zone: matches!(zone, Zone::Graveyard | Zone::Exile),
+                loyalty_used: false,
             },
         );
         self.zone_list_mut(zone, owner).push(id);
         self.version += 1;
+        if zone == Zone::Battlefield {
+            self.enter_battlefield_replacements(id);
+        }
         id
     }
 
@@ -342,6 +346,18 @@ impl Game {
             // The stack zone's order lives in `Game::stack`; this list is unused bookkeeping.
             Zone::Stack => &mut self.stack_cards,
         }
+    }
+
+    /// The combined color identity of `p`'s commanders (CR 903.4).
+    pub fn commander_identity(&self, p: PlayerId) -> ColorSet {
+        let cmd = &self.player(p).commanders;
+        let mut out = ColorSet::default();
+        for o in self.objects.values() {
+            if o.owner == p && cmd.contains(&o.card) {
+                out = out.union(o.def.color_identity);
+            }
+        }
+        out
     }
 
     pub fn is_commander(&self, id: ObjectId) -> bool {
@@ -430,6 +446,27 @@ impl Game {
                 None => {
                     self.player_mut(p).drew_from_empty_library = true;
                 }
+            }
+        }
+    }
+
+    /// Things that happen as a permanent enters rather than after (CR 614.1c-d): "enters
+    /// tapped", "enters with counters", a planeswalker's starting loyalty (CR 306.5b).
+    fn enter_battlefield_replacements(&mut self, id: ObjectId) {
+        let def = self.objects[&id].def.clone();
+        for a in &def.abilities {
+            match a {
+                Ability::EntersTapped => self.objects.get_mut(&id).unwrap().tapped = true,
+                Ability::EntersWithCounters {
+                    kind,
+                    amount: Amount::Fixed(n),
+                } if *n > 0 => self.add_counters(id, kind.clone(), *n as u32),
+                _ => {}
+            }
+        }
+        if def.has_type(CardType::Planeswalker) {
+            if let Some(l) = def.loyalty.filter(|l| *l > 0) {
+                self.add_counters(id, CounterKind::Loyalty, l as u32);
             }
         }
     }
