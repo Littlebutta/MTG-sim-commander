@@ -402,7 +402,7 @@ button { font: inherit; color: inherit; }
 .preview-name { font: 700 16px/1.2 var(--serif); }
 .preview-art {
   position: relative; overflow: hidden;
-  height: 150px; border-radius: 9px; display: grid; place-items: center;
+  aspect-ratio: 626 / 457; border-radius: 9px; display: grid; place-items: center;
   background:
     radial-gradient(circle at 70% 25%, color-mix(in srgb, var(--frame) 70%, white 10%) 0, transparent 55%),
     linear-gradient(200deg, color-mix(in srgb, var(--frame) 65%, #251a2e), color-mix(in srgb, var(--frame-deep) 80%, #0d0910));
@@ -636,6 +636,9 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 
 .art-img, .art-proc { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .art-img { animation: art-in 0.4s ease-out; }
+/* The big windows show the whole picture: the frame matches the art's shape, and anything
+   with an unusual shape is fitted inside it, never cropped. */
+.preview-art .art-img, .rules-art .art-img, .b-window-art .art-img, .b-tip-art .art-img { object-fit: contain; background: #0d0a10; }
 @keyframes art-in { from { opacity: 0; } }
 .art-glyph { position: relative; z-index: 1; }
 .art-proc + .art-glyph { opacity: 0.55; }
@@ -645,14 +648,14 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 
 /* right-click rules popup */
 .rules-popup {
-  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0; width: min(720px, calc(92 * var(--vw))); max-height: calc(86 * var(--vh));
+  display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 0; width: min(840px, calc(92 * var(--vw))); max-height: calc(86 * var(--vh));
   border-radius: 16px; overflow: hidden; background: linear-gradient(180deg, #221a2b, #140f19);
   border: 1px solid color-mix(in srgb, var(--frame, #888) 55%, transparent); box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
   animation: rise 0.15s ease-out; user-select: text;
 }
 .rules-popup.f-W { --frame: var(--mana-W); } .rules-popup.f-U { --frame: var(--mana-U); } .rules-popup.f-B { --frame: #a493b3; }
 .rules-popup.f-R { --frame: var(--mana-R); } .rules-popup.f-G { --frame: var(--mana-G); } .rules-popup.f-M { --frame: #d8b04a; } .rules-popup.f-C { --frame: var(--mana-C); }
-.rules-art { position: relative; display: grid; place-items: center; background: #0d0a10; min-height: 260px; }
+.rules-art { position: relative; display: grid; place-items: center; background: #0d0a10; aspect-ratio: 626 / 457; align-self: start; margin: 14px 0 14px 14px; border-radius: 10px; overflow: hidden; }
 .rules-body { padding: 18px 20px; overflow-y: auto; }
 .glossary { margin: 10px 0 0; display: grid; gap: 10px; }
 .glossary div { padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
@@ -949,6 +952,8 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
   padding: 14px; border-radius: 12px; background: rgba(14, 9, 18, 0.96); border: 1px solid var(--line);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column; gap: 6px;
 }
+.b-tip-art { position: relative; aspect-ratio: 626 / 457; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: #0d0a10; }
+.b-tip-art .art-glyph { opacity: 0.4; color: #fff; }
 .b-tip-head { display: flex; justify-content: space-between; gap: 8px; font: 600 15px var(--serif); }
 .b-tip-type { font-size: 12px; color: var(--muted); }
 .b-tip-text { font-size: 13px; white-space: pre-line; line-height: 1.45; }
@@ -1005,8 +1010,8 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
   background: rgba(16, 10, 22, 0.98); border: 1px solid var(--line); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
   max-height: calc(86 * var(--vh)); overflow: auto;
 }
-.b-window-art { border-radius: 12px; overflow: hidden; aspect-ratio: 5 / 7; position: relative; background: #0f0b14; }
-.b-window-art .art-proc, .b-window-art .art-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.b-window-art { border-radius: 12px; overflow: hidden; aspect-ratio: 626 / 457; align-self: start; position: relative; background: #0f0b14; }
+.b-window-art .art-proc, .b-window-art .art-img { width: 100%; height: 100%; display: block; }
 .b-window-art .art-glyph { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); opacity: 0.4; color: #fff; }
 .b-window-body { display: flex; flex-direction: column; gap: 8px; }
 .b-window-body .preview-text { font-size: 14px; line-height: 1.5; }
