@@ -479,7 +479,12 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     const ab = c.abilities.find((a) => a.index === index)!;
     if (ab.is_mana) {
       let color: string | null = null;
-      if (ab.label.includes("any color")) {
+      if (ab.label.includes("commander's color identity")) {
+        const opts = [...me.color_identity];
+        if (opts.length === 0) return;
+        color = opts.length === 1 ? opts[0] : window.prompt(`Which color? ${opts.join(", ")}`, opts[0])?.toUpperCase().slice(0, 1) ?? null;
+        if (!color) return;
+      } else if (ab.label.includes("any color")) {
         color = window.prompt("Which color? W, U, B, R or G", me.color_identity[0] ?? "G")?.toUpperCase().slice(0, 1) ?? null;
         if (!color) return;
       } else if (ab.label.includes(" or ")) {

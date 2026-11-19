@@ -505,7 +505,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         return run(async () => {
           s.flags[`got:${w.mapId}:${o.id}`] = true;
           if (o.kind === "card") {
-            const card = await findCard(o.region ?? "meadow", !!o.hidden, s.pools ?? []);
+            const card = await findCard(o.region ?? "meadow", !!o.hidden, s.pools ?? [], !!s.playableOnly);
             addCard(s, card);
             persist();
             await showFound({ card });

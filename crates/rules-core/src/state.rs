@@ -40,6 +40,9 @@ pub struct GameObject {
     pub is_token: bool,
     /// Moved to a graveyard or exile since state-based actions were last checked (CR 903.9a).
     pub new_in_zone: bool,
+    /// A loyalty ability of this permanent was activated this turn (CR 606.3).
+    #[serde(default)]
+    pub loyalty_used: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 //! Enumerating what a player can do right now, so a client can highlight playable cards.
 //! These are conveniences for the UI: `Game::submit` remains the authority on legality.
 
-use crate::card::{Ability, CardType, Keyword};
+use crate::card::{Ability, CardType, CounterKind, Keyword};
 use crate::engine::{plan_auto_tap, Decision};
 use crate::game::Game;
 use crate::ids::{ObjectId, PlayerId};
@@ -114,8 +114,14 @@ impl Game {
                 {
                     continue;
                 }
-                if sorcery && !self.sorcery_timing_ok(p) {
+                if (sorcery || cost.loyalty.is_some()) && !self.sorcery_timing_ok(p) {
                     continue;
+                }
+                if let Some(l) = cost.loyalty {
+                    let have = o.counters.get(&CounterKind::Loyalty).copied().unwrap_or(0) as i32;
+                    if o.loyalty_used || have + l < 0 {
+                        continue;
+                    }
                 }
                 if targets
                     .iter()

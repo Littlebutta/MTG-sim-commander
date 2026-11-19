@@ -90,7 +90,11 @@ fn decklist_parsing_and_validation() {
         .problems
         .iter()
         .any(|p| matches!(p, DeckProblem::WrongSize(_))));
+    // Proliferate isn't supported yet; Swords to Plowshares is.
     assert!(report
+        .unsupported
+        .contains(&"Atraxa, Praetors' Voice".to_string()));
+    assert!(!report
         .unsupported
         .contains(&"Swords to Plowshares".to_string()));
 }

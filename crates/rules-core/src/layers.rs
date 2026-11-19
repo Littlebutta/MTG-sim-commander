@@ -712,6 +712,19 @@ pub fn matches_filter(
     if f.nontoken && game.objects.get(&id).is_some_and(|o| o.is_token) {
         return false;
     }
+    if f.attached_to_this
+        && source
+            .and_then(|s| game.objects.get(&s))
+            .and_then(|o| o.attached_to)
+            != Some(id)
+    {
+        return false;
+    }
+    if let Some(t) = f.tapped {
+        if game.objects.get(&id).is_some_and(|o| o.tapped != t) {
+            return false;
+        }
+    }
     match f.controller {
         Some(PlayerRef::You) if c.controller != you => return false,
         Some(PlayerRef::Opponents) if c.controller == you => return false,

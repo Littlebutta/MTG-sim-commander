@@ -149,6 +149,9 @@ fn illegal<T>(s: impl Into<String>) -> Result<T, RulesError> {
 
 /// Whether evasion abilities let `blocker` block `attacker` (CR 702.9b: flying).
 fn evasion_allows_block(attacker: &Characteristics, blocker: &Characteristics) -> bool {
+    if attacker.has_keyword(Keyword::CantBeBlocked) || blocker.has_keyword(Keyword::CantBlock) {
+        return false;
+    }
     !attacker.has_keyword(Keyword::Flying)
         || blocker.has_keyword(Keyword::Flying)
         || blocker.has_keyword(Keyword::Reach)
@@ -182,6 +185,8 @@ struct Resolution {
     targets: Vec<Target>,
     legal: Vec<bool>,
     x: u32,
+    /// Controller and power of each target object as the spell or ability began to resolve.
+    lki: Vec<Option<(PlayerId, i32)>>,
 }
 
 impl Game {
@@ -460,6 +465,7 @@ impl Game {
                         if let Some(o) = self.object_mut(id) {
                             o.tapped = false;
                             o.summoning_sick = false;
+                            o.loyalty_used = false;
                         }
                     }
                 }
@@ -520,7 +526,16 @@ impl Game {
             Step::Cleanup => {
                 // 514.1: discard to maximum hand size.
                 if self.in_game(ap) {
-                    let max = self.player(ap).max_hand_size;
+                    let view = self.view();
+                    let unlimited = self.battlefield.iter().any(|id| {
+                        view.get(*id).is_some_and(|c| {
+                            c.controller == ap
+                                && c.abilities
+                                    .iter()
+                                    .any(|a| a.ability == Ability::NoMaxHandSize)
+                        })
+                    });
+                    let max = self.player(ap).max_hand_size.filter(|_| !unlimited);
                     let n = self.player(ap).hand.len();
                     if let Some(max) = max {
                         if n > max {
@@ -923,7 +938,7 @@ impl Game {
         else {
             return illegal("that isn't an activated ability (mana abilities use ActivateMana)");
         };
-        if *sorcery_speed && !self.sorcery_timing_ok(p) {
+        if (*sorcery_speed || cost.loyalty.is_some()) && !self.sorcery_timing_ok(p) {
             return illegal("activate only as a sorcery");
         }
         self.check_targets(p, Some(object), specs, &targets, false)?;
@@ -966,6 +981,15 @@ impl Game {
         if cost.pay_life as i32 > self.player(p).life {
             return illegal("not enough life");
         }
+        if let Some(l) = cost.loyalty {
+            if o.loyalty_used {
+                return illegal("only one loyalty ability per planeswalker each turn (606.3)");
+            }
+            let have = o.counters.get(&CounterKind::Loyalty).copied().unwrap_or(0) as i32;
+            if have + l < 0 {
+                return illegal("not enough loyalty");
+            }
+        }
         let mana = cost.mana.with_x_and_extra(x, 0);
         if !mana.0.is_empty() {
             self.pay_mana_cost(p, &mana)?;
@@ -975,6 +999,15 @@ impl Game {
         }
         if cost.pay_life > 0 {
             self.player_mut(p).life -= cost.pay_life as i32;
+        }
+        if let Some(l) = cost.loyalty {
+            let ts = self.new_timestamp();
+            let o = self.object_mut(object).unwrap();
+            o.loyalty_used = true;
+            let c = o.counters.entry(CounterKind::Loyalty).or_insert(0);
+            *c = (*c as i32 + l).max(0) as u32;
+            o.counter_timestamp = ts;
+            self.version += 1;
         }
         if cost.sacrifice_this {
             self.sacrifice(object);
@@ -1011,10 +1044,30 @@ impl Game {
                 vec![want]
             }
             ManaProduction::AnyColor => vec![ManaType::Color(color.unwrap_or(Color::White))],
+            ManaProduction::CommanderIdentity => {
+                let ids = self.commander_identity(p);
+                // 903.4f: with no colors in the identity, the ability makes no mana.
+                let Some(first) = ids.iter().next() else {
+                    return illegal("your commander's color identity has no colors");
+                };
+                let want = color.unwrap_or(first);
+                if !ids.contains(want) {
+                    return illegal("that color isn't in your commander's color identity");
+                }
+                vec![ManaType::Color(want)]
+            }
         };
         self.pay_cost(p, object, &ch, &cost, 0)?;
         for m in &mana {
             self.player_mut(p).mana_pool.add(*m, 1);
+        }
+        if cost.deals_damage_to_you > 0 {
+            self.deal_damage(
+                Some(object),
+                Target::Player(p),
+                cost.deals_damage_to_you as i32,
+                false,
+            );
         }
         if cost == Cost::tap() {
             self.mana_undo.push((p, object, mana));
@@ -1109,6 +1162,7 @@ impl Game {
                         || !cost.mana.0.is_empty()
                         || cost.sacrifice_this
                         || cost.pay_life > 0
+                        || cost.deals_damage_to_you > 0
                     {
                         continue;
                     }
@@ -1117,6 +1171,17 @@ impl Game {
                         ManaProduction::OneOf(v) => v.clone(),
                         ManaProduction::AnyColor => {
                             Color::ALL.iter().map(|c| ManaType::Color(*c)).collect()
+                        }
+                        ManaProduction::CommanderIdentity => {
+                            let v: Vec<ManaType> = self
+                                .commander_identity(p)
+                                .iter()
+                                .map(ManaType::Color)
+                                .collect();
+                            if v.is_empty() {
+                                continue;
+                            }
+                            v
                         }
                         _ => continue,
                     };
@@ -1157,7 +1222,10 @@ impl Game {
     ) -> bool {
         let hexproof_ok = |id: ObjectId| {
             let c = view.get(id);
-            !(c.is_some_and(|c| c.has_keyword(Keyword::Hexproof) && c.controller != controller))
+            !(c.is_some_and(|c| {
+                (c.has_keyword(Keyword::Hexproof) && c.controller != controller)
+                    || c.has_keyword(Keyword::Shroud)
+            }))
         };
         match (spec, t) {
             (TargetSpec::Any, Target::Player(p)) | (TargetSpec::Player, Target::Player(p)) => {
@@ -1271,6 +1339,14 @@ impl Game {
             .map(|(s, t)| self.target_legal(&view, entry.controller, source, s, t))
             .collect();
         let all_illegal = !specs.is_empty() && !legal.iter().any(|l| *l);
+        let lki: Vec<Option<(PlayerId, i32)>> = entry
+            .targets
+            .iter()
+            .map(|t| match t {
+                Target::Object(id) => view.get(*id).map(|c| (c.controller, c.power.unwrap_or(0))),
+                _ => None,
+            })
+            .collect();
         match &entry.kind {
             StackKind::Spell => {
                 let name = self.objects[&entry.id].def.name.clone();
@@ -1286,9 +1362,37 @@ impl Game {
                     .is_some_and(|c| c.types.iter().any(|t| t.is_permanent_type()));
                 if is_permanent {
                     // 608.3: permanent spell enters under its controller's control.
+                    let aura_target = match (entry.targets.first(), legal.first()) {
+                        (Some(Target::Object(t)), Some(true))
+                            if self.objects[&entry.id]
+                                .def
+                                .subtypes
+                                .iter()
+                                .any(|s| s == "Aura") =>
+                        {
+                            Some(*t)
+                        }
+                        _ => None,
+                    };
                     if let Some(new) =
                         self.move_object(entry.id, Zone::Battlefield, Some(entry.controller))
                     {
+                        // 303.4f: an Aura spell enters attached to what it targeted.
+                        if let Some(t) = aura_target {
+                            self.object_mut(new).unwrap().attached_to = Some(t);
+                        }
+                        let def = self.objects[&new].def.clone();
+                        for a in &def.abilities {
+                            if let Ability::EntersWithCounters {
+                                kind,
+                                amount: Amount::X,
+                            } = a
+                            {
+                                if entry.x > 0 {
+                                    self.add_counters(new, kind.clone(), entry.x);
+                                }
+                            }
+                        }
                         self.log(format!("{name} resolves."));
                         self.fire(Event::Entered(new));
                     }
@@ -1299,6 +1403,7 @@ impl Game {
                         targets: entry.targets.clone(),
                         legal,
                         x: entry.x,
+                        lki: lki.clone(),
                     };
                     self.log(format!("{name} resolves."));
                     for e in &effects {
@@ -1329,6 +1434,7 @@ impl Game {
                     targets: entry.targets.clone(),
                     legal,
                     x: entry.x,
+                    lki: lki.clone(),
                 };
                 for e in &effects {
                     self.execute(&res, e);
@@ -1357,9 +1463,15 @@ impl Game {
                 (Some(true), Some(Target::Player(p))) => vec![*p],
                 _ => vec![],
             },
+            // Falls back on last known information once the target has left (CR 608.2h).
             PlayerRef::ControllerOfTarget(i) => self
                 .target_obj(r, i)
                 .and_then(|id| self.view().controller(id))
+                .or_else(|| {
+                    (r.legal.get(i) == Some(&true))
+                        .then(|| r.lki.get(i).cloned().flatten().map(|(p, _)| p))
+                        .flatten()
+                })
                 .into_iter()
                 .collect(),
         }
@@ -1576,6 +1688,80 @@ impl Game {
                     self.move_object(id, Zone::Hand, None);
                 }
             }
+            Effect::Attach { target } => {
+                if let (Some(src), Some(t)) = (r.source, self.target_obj(r, *target)) {
+                    if self.is_on_battlefield(src) && src != t {
+                        self.object_mut(src).unwrap().attached_to = Some(t);
+                        self.version += 1;
+                    }
+                }
+            }
+            Effect::Scry { amount } | Effect::Surveil { amount } => {
+                let n = self.amount(r, amount).max(0) as usize;
+                let surveil = matches!(e, Effect::Surveil { .. });
+                self.scry(r.controller, n, surveil);
+            }
+            Effect::SearchLibrary {
+                filter,
+                count,
+                dest,
+            } => self.search_library(r, filter, *count, *dest),
+            Effect::AddCountersEach {
+                filter,
+                kind,
+                amount,
+            } => {
+                let n = self.amount(r, amount).max(0) as u32;
+                let view = self.view();
+                let objs: Vec<ObjectId> = self
+                    .battlefield
+                    .iter()
+                    .copied()
+                    .filter(|id| {
+                        matches_filter(self, filter, *id, &view.chars, r.source, r.controller)
+                    })
+                    .collect();
+                for o in objs {
+                    self.add_counters(o, kind.clone(), n);
+                }
+                self.version += 1;
+            }
+            Effect::Discard { who, amount } => {
+                let n = self.amount(r, amount).max(0) as usize;
+                for p in self.players_for(r, *who) {
+                    for _ in 0..n {
+                        if let Some(c) = self.auto_discard_choice(p) {
+                            self.move_object(c, Zone::Graveyard, None);
+                        }
+                    }
+                }
+            }
+            Effect::Fight { target } => {
+                let (Some(src), Some(t)) = (r.source, self.target_obj(r, *target)) else {
+                    return;
+                };
+                if !self.is_on_battlefield(src) || !self.is_on_battlefield(t) {
+                    return;
+                }
+                let view = self.view();
+                let (Some(a), Some(b)) = (view.get(src).cloned(), view.get(t).cloned()) else {
+                    return;
+                };
+                if !a.is_creature() || !b.is_creature() {
+                    return;
+                }
+                // 701.14b: each deals damage equal to its power to the other.
+                self.deal_damage(Some(src), Target::Object(t), a.power.unwrap_or(0), false);
+                self.deal_damage(Some(t), Target::Object(src), b.power.unwrap_or(0), false);
+            }
+            Effect::ControllerOfTargetGainsLifeEqualToPower { target } => {
+                // Uses last known information: the target has usually just left (Swords to Plowshares).
+                if r.legal.get(*target) == Some(&true) {
+                    if let Some((ctl, pow)) = r.lki.get(*target).cloned().flatten() {
+                        self.player_mut(ctl).life += pow.max(0);
+                    }
+                }
+            }
             Effect::Sacrifice { who, filter } => {
                 for p in self.players_for(r, *who) {
                     let view = self.view();
@@ -1595,12 +1781,183 @@ impl Game {
         }
     }
 
+    /// Scry/surveil N, chosen automatically: keep what the player needs (lands while they
+    /// have few, spells they could soon cast), send the rest to the bottom or graveyard.
+    fn scry(&mut self, p: PlayerId, n: usize, surveil: bool) {
+        let view = self.view();
+        let lands = self
+            .battlefield
+            .iter()
+            .filter(|id| {
+                view.get(**id)
+                    .is_some_and(|c| c.controller == p && c.has_type(CardType::Land))
+            })
+            .count() as u32;
+        let hand_lands = self
+            .player(p)
+            .hand
+            .iter()
+            .filter(|id| self.objects[id].def.has_type(CardType::Land))
+            .count() as u32;
+        let lib = &self.player(p).library;
+        let top: Vec<ObjectId> = lib.iter().rev().take(n).copied().collect();
+        let mut away = Vec::new();
+        for id in &top {
+            let d = &self.objects[id].def;
+            let keep = if d.has_type(CardType::Land) {
+                lands + hand_lands < 6
+            } else {
+                d.mana_cost.mana_value() <= lands + hand_lands + 2
+            };
+            if !keep {
+                away.push(*id);
+            }
+        }
+        for id in away {
+            if surveil {
+                self.move_object(id, Zone::Graveyard, None);
+            } else {
+                self.move_to_library(id, Some(usize::MAX));
+            }
+        }
+        self.log(format!(
+            "{} {} {n}.",
+            self.player(p).name,
+            if surveil { "surveils" } else { "scries" }
+        ));
+    }
+
+    /// Search the controller's library (chosen automatically: lands that add colors the player
+    /// lacks first, otherwise the costliest matching cards).
+    fn search_library(&mut self, r: &Resolution, filter: &Filter, count: u32, dest: SearchDest) {
+        let p = r.controller;
+        let view = self.view();
+        let mut found: Vec<ObjectId> = self
+            .player(p)
+            .library
+            .iter()
+            .copied()
+            .filter(|id| matches_filter_any_zone(self, filter, *id, &view, r.source, p))
+            .collect();
+        let identity = self.commander_identity(p);
+        let have: Vec<String> = self
+            .battlefield
+            .iter()
+            .filter_map(|id| view.get(*id))
+            .filter(|c| c.controller == p)
+            .flat_map(|c| c.subtypes.clone())
+            .collect();
+        let score = |g: &Game, id: &ObjectId| -> i64 {
+            let d = &g.objects[id].def;
+            if d.has_type(CardType::Land) {
+                let basic_color = ["Plains", "Island", "Swamp", "Mountain", "Forest"]
+                    .iter()
+                    .zip(Color::ALL)
+                    .find(|(t, _)| d.subtypes.iter().any(|s| s == *t));
+                let fits =
+                    basic_color.is_none_or(|(_, c)| identity.is_empty() || identity.contains(c));
+                let owned = d.subtypes.iter().filter(|s| have.contains(s)).count() as i64;
+                (fits as i64) * 100 - owned * 3
+            } else {
+                d.mana_cost.mana_value() as i64
+            }
+        };
+        found.sort_by_key(|id| -score(self, id));
+        let mut picked: Vec<ObjectId> = Vec::new();
+        for id in found {
+            if picked.len() as u32 >= count {
+                break;
+            }
+            // Spread land searches across types ("two basic lands": a Forest and an Island).
+            let d = &self.objects[&id].def;
+            if d.has_type(CardType::Land)
+                && picked.iter().any(|x| self.objects[x].def.name == d.name)
+                && picked.len() < count as usize
+            {
+                continue;
+            }
+            picked.push(id);
+        }
+        if (picked.len() as u32) < count {
+            // Fill up with duplicates if that's all there is.
+            let more: Vec<ObjectId> = self
+                .player(p)
+                .library
+                .iter()
+                .copied()
+                .filter(|id| !picked.contains(id))
+                .filter(|id| matches_filter_any_zone(self, filter, *id, &view, r.source, p))
+                .take((count as usize).saturating_sub(picked.len()))
+                .collect();
+            picked.extend(more);
+        }
+        let mut on_top = Vec::new();
+        for (i, id) in picked.iter().enumerate() {
+            let name = self.objects[id].def.name.clone();
+            match dest {
+                SearchDest::Hand => {
+                    self.move_object(*id, Zone::Hand, None);
+                }
+                SearchDest::Battlefield { tapped } => {
+                    self.put_onto_battlefield(*id, p, tapped);
+                }
+                SearchDest::BattlefieldTappedThenHand => {
+                    if i == 0 {
+                        self.put_onto_battlefield(*id, p, true);
+                    } else {
+                        self.move_object(*id, Zone::Hand, None);
+                    }
+                }
+                SearchDest::TopOfLibrary => on_top.push(*id),
+            }
+            self.log(format!("{} finds {name}.", self.player(p).name));
+        }
+        self.shuffle_library(p);
+        for id in on_top {
+            self.move_to_library(id, Some(0));
+        }
+    }
+
+    fn put_onto_battlefield(&mut self, id: ObjectId, controller: PlayerId, tapped: bool) {
+        if let Some(new) = self.move_object(id, Zone::Battlefield, Some(controller)) {
+            if tapped {
+                self.object_mut(new).unwrap().tapped = true;
+            }
+            self.fire(Event::Entered(new));
+        }
+    }
+
+    /// The card a player discards when the game chooses for them: an extra land if they hold
+    /// plenty, otherwise their costliest card.
+    fn auto_discard_choice(&self, p: PlayerId) -> Option<ObjectId> {
+        let hand = &self.player(p).hand;
+        let lands: Vec<ObjectId> = hand
+            .iter()
+            .copied()
+            .filter(|id| self.objects[id].def.has_type(CardType::Land))
+            .collect();
+        if lands.len() >= 3 {
+            return lands.last().copied();
+        }
+        hand.iter().copied().max_by_key(|id| {
+            let d = &self.objects[id].def;
+            (!d.has_type(CardType::Land), d.mana_cost.mana_value())
+        })
+    }
+
     fn counter(&mut self, id: ObjectId) {
         let Some(entry) = self.stack.iter().find(|e| e.id == id).cloned() else {
             return;
         };
         match entry.kind {
             StackKind::Spell => {
+                if self
+                    .view()
+                    .get(id)
+                    .is_some_and(|c| c.has_keyword(Keyword::CantBeCountered))
+                {
+                    return;
+                }
                 self.move_object(id, Zone::Graveyard, None);
             }
             StackKind::Ability { .. } => {
@@ -1745,6 +2102,7 @@ impl Game {
         let mut cease: Vec<ObjectId> = Vec::new();
         let mut to_command: Vec<ObjectId> = Vec::new();
         let mut counter_fix: Vec<(ObjectId, u32)> = Vec::new();
+        let mut unattach: Vec<ObjectId> = Vec::new();
         for (id, o) in &self.objects {
             // 704.5d
             if o.is_token && o.zone != Zone::Battlefield {
@@ -1781,6 +2139,15 @@ impl Game {
             }
             if c.has_subtype("Aura") && o.attached_to.is_none_or(|a| !self.is_on_battlefield(a)) {
                 to_graveyard.push(*id); // 704.5m (approximation: must be attached to a permanent)
+            }
+            // 704.5n: Equipment attached to something that isn't a creature on the battlefield
+            // becomes unattached.
+            if let Some(a) = o.attached_to {
+                if c.has_subtype("Equipment")
+                    && !(self.is_on_battlefield(a) && view.get(a).is_some_and(|x| x.is_creature()))
+                {
+                    unattach.push(*id);
+                }
             }
             // 704.5q
             let plus = o
@@ -1856,6 +2223,12 @@ impl Game {
             if self.objects.contains_key(&id) {
                 any = true;
                 self.move_object(id, Zone::Command, None);
+            }
+        }
+        for id in unattach {
+            any = true;
+            if let Some(o) = self.object_mut(id) {
+                o.attached_to = None;
             }
         }
         for (id, n) in counter_fix {
@@ -2010,6 +2383,39 @@ impl Game {
                     });
                 }
             }
+            // 702.108a prowess: a triggered ability the keyword stands for.
+            if let Event::Cast { player, spell } = &ev {
+                if *player == ch.controller
+                    && ch.has_keyword(Keyword::Prowess)
+                    && view.get(*spell).is_some_and(|c| !c.is_creature())
+                {
+                    for _ in ch
+                        .abilities
+                        .iter()
+                        .filter(|a| a.ability == Ability::Keyword(Keyword::Prowess))
+                    {
+                        found.push(PendingTrigger {
+                            controller: ch.controller,
+                            source: src,
+                            source_name: ch.name.clone(),
+                            ability: Ability::Triggered {
+                                event: TriggerEvent::YouCastSpell(Filter {
+                                    not_types: vec![CardType::Creature],
+                                    ..Default::default()
+                                }),
+                                targets: vec![],
+                                effects: vec![Effect::ApplyContinuous {
+                                    affected: Affected::ThisObject,
+                                    mods: vec![Modification::ModifyPT(1, 1)],
+                                    duration: Duration::EndOfTurn,
+                                }],
+                                optional: false,
+                            },
+                            subject: Some(Target::Object(*spell)),
+                        });
+                    }
+                }
+            }
         };
         match &ev {
             Event::Died { lki, source } => {
@@ -2094,6 +2500,7 @@ impl Game {
             && !o.tapped
             && (!o.summoning_sick || c.has_keyword(Keyword::Haste))
             && !c.has_keyword(Keyword::Defender)
+            && !c.has_keyword(Keyword::CantAttack)
     }
 
     fn declare_attackers(
@@ -2164,9 +2571,13 @@ impl Game {
                 return illegal("no such attacker");
             };
             if !evasion_allows_block(ac, bc) {
-                return illegal(
-                    "creatures with flying can only be blocked by flying or reach (702.9b)",
-                );
+                return illegal(if bc.has_keyword(Keyword::CantBlock) {
+                    "that creature can't block"
+                } else if ac.has_keyword(Keyword::CantBeBlocked) {
+                    "that creature can't be blocked"
+                } else {
+                    "creatures with flying can only be blocked by flying or reach (702.9b)"
+                });
             }
         }
         for (a, _) in self.combat.attackers.iter().filter(|(_, d)| *d == p) {

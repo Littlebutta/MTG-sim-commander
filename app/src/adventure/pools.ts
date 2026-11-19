@@ -50,21 +50,21 @@ function load(id: PoolId): Promise<CardSummary[]> {
 }
 
 /** How many different cards a set of pools holds. */
-export async function poolSize(ids: PoolId[]): Promise<number> {
+export async function poolSize(ids: PoolId[], playableOnly = false): Promise<number> {
   const lists = await Promise.all(ids.map(load));
-  return new Set(lists.flat().map((c) => c.name)).size;
+  return new Set(lists.flat().filter((c) => !playableOnly || c.supported).map((c) => c.name)).size;
 }
 
 /** A random card for a lost-card spot, rolled when it's picked up. Finds lean toward the
  *  region's color, and hidden spots lean toward pricier cards, but anything can turn up. */
-export async function findCard(region: string, hidden: boolean, pools: PoolId[]): Promise<string> {
+export async function findCard(region: string, hidden: boolean, pools: PoolId[], playableOnly = false): Promise<string> {
   const ids = pools.length ? pools : DEFAULT_POOLS;
   const vale = () => {
     const list = hidden ? LOST_POOLS.rare : LOST_POOLS[region] ?? LOST_POOLS.meadow;
     return list[Math.floor(Math.random() * list.length)] ?? lostCard(String(Math.random()), region, hidden);
   };
   try {
-    const others = (await Promise.all(ids.filter((i) => i !== "elderreach").map(load))).flat();
+    const others = (await Promise.all(ids.filter((i) => i !== "elderreach").map(load))).flat().filter((c) => !playableOnly || c.supported);
     // With the Vale's cards in the mix, about a third of finds come from them.
     if (others.length === 0 || (ids.includes("elderreach") && Math.random() < 0.35)) return vale();
     const color = REGION_COLOR[region] ?? "";

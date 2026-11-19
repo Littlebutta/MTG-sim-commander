@@ -87,9 +87,29 @@ pub enum Keyword {
     Reach,
     Trample,
     Vigilance,
+    Shroud,
+    /// Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.
+    Prowess,
+    // Rules restrictions that behave like keywords: printed on a card ("~ can't block") or
+    // granted by an Aura or Equipment ("enchanted creature can't attack or block").
+    CantAttack,
+    CantBlock,
+    CantBeBlocked,
+    CantBeCountered,
 }
 
 impl Keyword {
+    /// How the game names it to players.
+    pub fn label(self) -> String {
+        match self {
+            Keyword::CantAttack => "Can't attack".into(),
+            Keyword::CantBlock => "Can't block".into(),
+            Keyword::CantBeBlocked => "Can't be blocked".into(),
+            Keyword::CantBeCountered => "Can't be countered".into(),
+            k => format!("{k:?}"),
+        }
+    }
+
     pub fn parse(s: &str) -> Option<Keyword> {
         Some(match s.trim().to_ascii_lowercase().as_str() {
             "deathtouch" => Keyword::Deathtouch,
@@ -106,6 +126,8 @@ impl Keyword {
             "reach" => Keyword::Reach,
             "trample" => Keyword::Trample,
             "vigilance" => Keyword::Vigilance,
+            "shroud" => Keyword::Shroud,
+            "prowess" => Keyword::Prowess,
             _ => return None,
         })
     }
@@ -126,6 +148,7 @@ pub enum PlayerRef {
 /// Describes a set of objects, evaluated against characteristics as they stand at the
 /// moment of evaluation (so it can change while layers are applied, CR 611.3a, 613.8a).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Filter {
     /// Object must have at least one of these card types (empty = any).
     pub any_of_types: Vec<CardType>,
@@ -147,6 +170,10 @@ pub struct Filter {
     pub other_than_this: bool,
     pub nontoken: bool,
     pub keyword: Option<Keyword>,
+    /// Only the permanent the source is attached to ("enchanted creature", "equipped creature").
+    pub attached_to_this: bool,
+    /// Object must be untapped / tapped.
+    pub tapped: Option<bool>,
 }
 
 impl Filter {
@@ -301,6 +328,58 @@ pub enum Effect {
         who: PlayerRef,
         filter: Filter,
     },
+    /// Attach the source (an Aura or Equipment) to the target permanent (CR 701.3).
+    Attach {
+        target: usize,
+    },
+    /// Look at the top N cards and put any number on the bottom (CR 701.22). The choice is
+    /// made automatically for now.
+    Scry {
+        amount: Amount,
+    },
+    /// Like scry, but cards go to the graveyard (CR 701.25).
+    Surveil {
+        amount: Amount,
+    },
+    /// Search your library for up to `count` cards matching the filter, put them where
+    /// `dest` says, then shuffle (CR 701.23). The cards are picked automatically for now.
+    SearchLibrary {
+        filter: Filter,
+        count: u32,
+        dest: SearchDest,
+    },
+    /// Put counters on each permanent matching the filter.
+    AddCountersEach {
+        filter: Filter,
+        kind: CounterKind,
+        amount: Amount,
+    },
+    /// The player discards cards (chosen automatically for now).
+    Discard {
+        who: PlayerRef,
+        amount: Amount,
+    },
+    /// The source and the target creature deal damage equal to their power to each other (CR 701.14).
+    Fight {
+        target: usize,
+    },
+    /// Its controller (of the Nth target) gains or loses life equal to that target's power.
+    ControllerOfTargetGainsLifeEqualToPower {
+        target: usize,
+    },
+}
+
+/// Where searched-for cards go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SearchDest {
+    Hand,
+    Battlefield {
+        tapped: bool,
+    },
+    /// The first onto the battlefield tapped, the rest into your hand (Cultivate).
+    BattlefieldTappedThenHand,
+    /// On top of the library after shuffling.
+    TopOfLibrary,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -421,6 +500,14 @@ pub struct Cost {
     pub tap: bool,
     pub sacrifice_this: bool,
     pub pay_life: u32,
+    /// Loyalty abilities (CR 606): add (or remove, if negative) loyalty counters. Once each
+    /// turn per permanent, at sorcery speed.
+    #[serde(default)]
+    pub loyalty: Option<i32>,
+    /// Painlands: "{T}: Add {U} or {B}. This land deals 1 damage to you." Not a cost, but it
+    /// always comes with the mana, so it rides along here.
+    #[serde(default)]
+    pub deals_damage_to_you: u32,
 }
 
 impl Cost {
@@ -491,6 +578,15 @@ pub enum Ability {
         power: Amount,
         toughness: Amount,
     },
+    /// "~ enters tapped."
+    EntersTapped,
+    /// "~ enters with N +1/+1 counters on it." (X uses the spell's X.)
+    EntersWithCounters {
+        kind: CounterKind,
+        amount: Amount,
+    },
+    /// "You have no maximum hand size."
+    NoMaxHandSize,
     /// Text the engine can't execute yet; kept so the UI can show it and flag the card.
     Unsupported(String),
 }
@@ -500,6 +596,8 @@ pub enum ManaProduction {
     Fixed(Vec<ManaType>),
     OneOf(Vec<ManaType>),
     AnyColor,
+    /// One mana of any color in your commander's color identity.
+    CommanderIdentity,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

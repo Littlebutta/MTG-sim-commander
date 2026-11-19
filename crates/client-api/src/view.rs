@@ -162,7 +162,7 @@ pub(crate) fn card_view(
         .abilities
         .iter()
         .filter_map(|a| match &a.ability {
-            Ability::Keyword(k) => Some(format!("{k:?}")),
+            Ability::Keyword(k) => Some(k.label()),
             _ => None,
         })
         .collect();
