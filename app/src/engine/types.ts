@@ -13,6 +13,7 @@ export type Decision =
   | { DeclareAttackers: { player: number } }
   | { DeclareBlockers: { player: number } }
   | { AssignCombatDamage: AssignDamageDecision }
+  | { CommanderZone: { player: number; commander: number; zone: string } }
   | { Discard: { player: number; count: number } }
   | { GameOver: { winner: number | null } };
 
@@ -43,7 +44,9 @@ export type Action =
   | { AssignDamage: [Target, number][] }
   | { UndoMana: number }
   | { Discard: number[] }
-  | { SetCommanderReturn: boolean };
+  | { SetCommanderReturn: boolean }
+  | { SetCommanderAsk: boolean }
+  | { CommanderToCommandZone: boolean };
 
 export interface AbilityView {
   index: number;
@@ -153,6 +156,8 @@ export interface PlayerView {
   log: string[];
   hints: Hints;
   commander_return: boolean;
+  /** The commander a CommanderZone decision is about. */
+  commander_question?: CardView | null;
 }
 
 export function decisionKind(d: Decision): string {

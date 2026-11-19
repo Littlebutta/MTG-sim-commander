@@ -396,3 +396,77 @@ fn unspent_mana_can_be_taken_back() {
     g.submit(P0, Action::Pass).unwrap();
     assert!(g.undoable_mana(P0).is_empty());
 }
+
+fn kill_commander_and_wait_for_question(g: &mut Game) -> ObjectId {
+    g.submit(P0, Action::SetCommanderAsk(true)).unwrap();
+    let cmd = commander_of(g, P0);
+    add_mana(g, P0, "GGG");
+    cast(g, P0, cmd, vec![]);
+    resolve_all(g);
+    let m = in_hand(g, P1, murder());
+    add_mana(g, P1, "BBB");
+    priority_to(g, P1);
+    let cmd = commander_of(g, P0);
+    cast(g, P1, m, vec![Target::Object(cmd)]);
+    for _ in 0..10 {
+        if let Decision::CommanderZone { player, zone, .. } = g.decision().clone() {
+            assert_eq!(player, P0);
+            assert_eq!(zone, Zone::Graveyard);
+            return commander_of(g, P0);
+        }
+        let p = priority(g);
+        g.submit(p, Action::Pass).unwrap();
+    }
+    panic!("the owner was never asked");
+}
+
+#[test]
+fn owner_is_asked_where_a_dead_commander_goes_and_can_keep_it_in_the_graveyard() {
+    let mut g = game(2);
+    kill_commander_and_wait_for_question(&mut g);
+    g.submit(P0, Action::CommanderToCommandZone(false)).unwrap();
+    assert_eq!(
+        g.object(commander_of(&g, P0)).unwrap().zone,
+        Zone::Graveyard
+    );
+    // The question isn't repeated.
+    assert!(matches!(g.decision(), Decision::Priority { .. }));
+    let p = priority(&g);
+    g.submit(p, Action::Pass).unwrap();
+    assert!(!matches!(g.decision(), Decision::CommanderZone { .. }));
+}
+
+#[test]
+fn owner_is_asked_and_can_send_a_dead_commander_to_the_command_zone() {
+    let mut g = game(2);
+    kill_commander_and_wait_for_question(&mut g);
+    g.submit(P0, Action::CommanderToCommandZone(true)).unwrap();
+    assert_eq!(g.object(commander_of(&g, P0)).unwrap().zone, Zone::Command);
+}
+
+#[test]
+fn owner_is_asked_when_a_commander_is_returned_to_hand_and_can_keep_it_there() {
+    let mut g = game(2);
+    g.submit(P0, Action::SetCommanderAsk(true)).unwrap();
+    let cmd = commander_of(&g, P0);
+    add_mana(&mut g, P0, "GGG");
+    cast(&mut g, P0, cmd, vec![]);
+    resolve_all(&mut g);
+    let on_bf = commander_of(&g, P0);
+    let u = in_hand(&mut g, P0, unsummon());
+    add_mana(&mut g, P0, "U");
+    cast(&mut g, P0, u, vec![Target::Object(on_bf)]);
+    for _ in 0..10 {
+        if matches!(g.decision(), Decision::CommanderZone { .. }) {
+            break;
+        }
+        let p = priority(&g);
+        g.submit(p, Action::Pass).unwrap();
+    }
+    assert!(
+        matches!(g.decision(), Decision::CommanderZone { player, zone, .. } if *player == P0 && *zone == Zone::Hand)
+    );
+    g.submit(P0, Action::CommanderToCommandZone(false)).unwrap();
+    assert_eq!(g.object(commander_of(&g, P0)).unwrap().zone, Zone::Hand);
+    assert!(matches!(g.decision(), Decision::Priority { .. }));
+}

@@ -3,6 +3,7 @@
 // or choose a target.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { uiScale } from "../scale";
 
 export type Anchor = { obj: number } | { player: number } | "cursor";
 export type ArrowTone = "attack" | "block" | "target" | "drag" | "incoming";
@@ -39,8 +40,10 @@ export function elementAtPointer(): Element | null {
 }
 
 const center = (el: Element) => {
+  // The layer is drawn inside the scaled interface, so screen pixels are divided by the scale.
   const r = el.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  const z = uiScale();
+  return { x: (r.left + r.width / 2) / z, y: (r.top + r.height / 2) / z };
 };
 
 export function ArrowLayer({ arrows, snap, ghost }: { arrows: ArrowSpec[]; snap?: (el: Element | null) => Element | null; ghost?: ReactNode }) {
@@ -84,7 +87,7 @@ export function ArrowLayer({ arrows, snap, ghost }: { arrows: ArrowSpec[]; snap?
       if (snapped) {
         e = center(snapped);
         locked = true;
-      } else e = { ...pointer };
+      } else e = { x: pointer.x / uiScale(), y: pointer.y / uiScale() };
     } else {
       const toEl = anchorEl(a.to);
       if (!toEl) return [];
@@ -125,7 +128,7 @@ export function ArrowLayer({ arrows, snap, ghost }: { arrows: ArrowSpec[]; snap?
         ))}
       </svg>
       {ghost && (
-        <div className="drag-ghost" style={{ left: pointer.x, top: pointer.y }}>
+        <div className="drag-ghost" style={{ left: pointer.x / uiScale(), top: pointer.y / uiScale() }}>
           {ghost}
         </div>
       )}

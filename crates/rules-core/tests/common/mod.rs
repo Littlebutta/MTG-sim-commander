@@ -330,6 +330,9 @@ pub fn default_answer(g: &mut Game) {
         Decision::AssignCombatDamage {
             player, suggested, ..
         } => g.submit(player, Action::AssignDamage(suggested)).unwrap(),
+        Decision::CommanderZone { player, .. } => g
+            .submit(player, Action::CommanderToCommandZone(true))
+            .unwrap(),
         Decision::Discard { player, count } => {
             let cards = g.hand(player)[..count].to_vec();
             g.submit(player, Action::Discard(cards)).unwrap()

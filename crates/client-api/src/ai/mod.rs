@@ -188,6 +188,10 @@ impl Brain {
                 action: Action::AssignDamage(suggested),
                 think_ms: 500,
             },
+            Decision::CommanderZone { .. } => Decided {
+                action: Action::CommanderToCommandZone(true),
+                think_ms: 300,
+            },
             Decision::Discard { count, .. } => self.discard(g, count),
             Decision::GameOver { .. } => Decided {
                 action: Action::Pass,

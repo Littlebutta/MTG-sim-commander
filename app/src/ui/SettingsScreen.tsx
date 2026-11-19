@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { BACKS, THEMES, imageToBack, saveSettings, useSettings } from "../settings";
+import { play } from "../sound";
 
 export function SettingsScreen({ onBack }: { onBack: () => void }) {
   const s = useSettings();
@@ -21,6 +22,22 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
         <span />
       </header>
       <div className="settings-body">
+        <div className="menu-label">Sound</div>
+        <div className="sound-row">
+          <label className="toggle"><input type="checkbox" checked={s.sound} onChange={(e) => saveSettings({ sound: e.target.checked }).then(() => play("resolve"))} /> Sound effects</label>
+          <label className="volume">
+            <span className="muted small">Volume</span>
+            <input type="range" min={0} max={100} step={5} value={Math.round(s.volume * 100)} disabled={!s.sound}
+              onChange={(e) => saveSettings({ volume: Number(e.target.value) / 100 })}
+              onPointerUp={() => play("cast")} onKeyUp={() => play("cast")} />
+            <span className="muted small volume-num">{Math.round(s.volume * 100)}%</span>
+          </label>
+          <span className="sound-tests">
+            {([["Draw", "draw"], ["Spell", "cast"], ["Attack", "attack"], ["Damage", "hit"], ["Your turn", "yourTurn"]] as const).map(([label, id]) => (
+              <button key={id} className="ghost small" disabled={!s.sound} onClick={() => play(id)}>{label}</button>
+            ))}
+          </span>
+        </div>
         <div className="menu-label">Your side of the table</div>
         <div className="theme-grid">
           {THEMES.map((t) => (

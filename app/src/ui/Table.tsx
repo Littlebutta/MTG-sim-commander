@@ -5,7 +5,8 @@ import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
 import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
 import { CrownIcon, ScrollIcon, ShieldIcon, SwordIcon } from "./icons";
-import { DamageModal, DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
+import { CommanderModal, DamageModal, DiscardModal, GameOverModal, MulliganModal, TriggerModal } from "./Modals";
+import { play, playChanges } from "../sound";
 import { ArrowLayer, anchorEl, elementAtPointer, type ArrowSpec } from "./Arrows";
 
 type Mode =
@@ -122,6 +123,19 @@ function CommandZone({ cards, onHover, onInspect, mine, castable, onCast }: {
   );
 }
 
+// Your side of the table has nine places to put cards: three rows (front, middle, back), each
+// with a left, center and right area. Cards land in a default place and can be dragged anywhere.
+const ROWS = ["front", "mid", "back"] as const;
+const COLS = ["l", "c", "r"] as const;
+type Slot = `${(typeof ROWS)[number]}-${(typeof COLS)[number]}`;
+const SLOT_NAMES: Record<Slot, string> = {
+  "front-l": "Front left", "front-c": "Front line", "front-r": "Front right",
+  "mid-l": "Middle left", "mid-c": "Middle", "mid-r": "Middle right",
+  "back-l": "Back left", "back-c": "Lands", "back-r": "Back right",
+};
+const defaultSlot = (c: CardView): Slot =>
+  c.types.includes("Creature") ? "front-c" : c.types.includes("Land") ? "back-c" : "back-l";
+
 // Instants and flash cards you've asked not to pause the game for (right-click a card in hand).
 const QUIET_KEY = "ct-quiet-cards";
 function loadQuiet(): Set<string> {
@@ -171,7 +185,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const [quiet, setQuiet] = useState<Set<string>>(loadQuiet);
   const [castPop, setCastPop] = useState<{ id: number; closed: boolean } | null>(null);
   // Your own battlefield, arranged the way you like: card ids per row, in order.
-  const [arranged, setArranged] = useState<{ front: number[]; back: number[] }>({ front: [], back: [] });
+  const [arranged, setArranged] = useState<Partial<Record<Slot, number[]>>>({});
   // Your hand, in the order you've dragged it into. New cards join on the right.
   const [handOrder, setHandOrder] = useState<number[]>([]);
   const settings = useSettings();
@@ -192,6 +206,16 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (err) setToast(err);
   }), [session]);
 
+  // Sound: play whatever changed since the last view.
+  const heard = useRef<PlayerView>(view);
+  useEffect(() => {
+    play("shuffle");
+  }, []);
+  useEffect(() => {
+    if (heard.current !== view) playChanges(heard.current, view);
+    heard.current = view;
+  }, [view]);
+
   const me = view.players[view.you];
   const opponents = view.players.filter((p) => !p.is_you);
   const focused = opponents.find((p) => p.id === focus && !p.lost) ?? opponents.find((p) => !p.lost) ?? opponents[0];
@@ -201,7 +225,10 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   const act = useCallback(
     (a: Action) => {
       const err = session.submit(a);
-      if (err) setToast(err.replace(/^illegal: /, ""));
+      if (err) {
+        setToast(err.replace(/^illegal: /, ""));
+        play("error");
+      }
       setMode({ kind: "idle" });
       setView(session.view());
     },
@@ -556,14 +583,11 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   // Drop a permanent somewhere on your side: into the row under the pointer, before the card
   // under it (or at the end).
   const arrangeDrop = (id: number, el: Element | null) => {
-    const rowEl = el?.closest(".board-me .row");
-    const board = el?.closest(".board-me");
-    if (!rowEl && !board) return;
-    const toBack = rowEl ? rowEl.classList.contains("row-back") : false;
-    const cur = rowsFor(view.you);
-    const front = cur.front.map((c) => c.id).filter((x) => x !== id);
-    const back = [...cur.lands, ...cur.support].map((c) => c.id).filter((x) => x !== id);
-    const list = toBack ? back : front;
+    const slot = el?.closest(".board-me [data-slot]")?.getAttribute("data-slot") as Slot | null | undefined;
+    if (!slot) return;
+    const next: Partial<Record<Slot, number[]>> = {};
+    for (const k of Object.keys(mySlots) as Slot[]) next[k] = mySlots[k].map((c) => c.id).filter((x) => x !== id);
+    const list = next[slot]!;
     const over = objAt(el);
     let at = list.length;
     if (over && list.includes(over.id)) {
@@ -571,7 +595,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       at = list.indexOf(over.id) + (pointerX.current > r.left + r.width / 2 ? 1 : 0);
     }
     list.splice(at, 0, id);
-    setArranged({ front, back });
+    setArranged(next);
   };
   const pointerX = useRef(0);
   const objAt = (el: Element | null) => {
@@ -700,21 +724,31 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   // ---------------------------------------------------------------- layout helpers
   const rowsFor = (pid: number) => {
     const mine = view.battlefield.filter((c) => c.controller === pid);
-    if (pid === view.you && (arranged.front.length || arranged.back.length)) {
-      // Cards you've placed keep their spot; new ones join their usual row at the end.
-      const byId = new Map(mine.map((c) => [c.id, c]));
-      const placed = new Set([...arranged.front, ...arranged.back]);
-      const pick = (ids: number[]) => ids.map((i) => byId.get(i)).filter((c): c is CardView => !!c);
-      const fresh = mine.filter((c) => !placed.has(c.id));
-      const freshFront = fresh.filter((c) => c.types.includes("Creature"));
-      const freshBack = fresh.filter((c) => !c.types.includes("Creature"));
-      return { lands: [] as CardView[], front: [...pick(arranged.front), ...freshFront], support: [...pick(arranged.back), ...freshBack] };
-    }
     const lands = mine.filter((c) => c.types.includes("Land") && !c.types.includes("Creature"));
     const creatures = mine.filter((c) => c.types.includes("Creature"));
     const other = mine.filter((c) => !lands.includes(c) && !creatures.includes(c));
     return { lands, front: creatures, support: other };
   };
+  // Your own side: cards you've placed keep their spot; new ones join their usual place at the end.
+  const mySlots = (() => {
+    const out = {} as Record<Slot, CardView[]>;
+    for (const r of ROWS) for (const c of COLS) out[`${r}-${c}`] = [];
+    const cards = view.battlefield.filter((c) => c.controller === view.you);
+    const byId = new Map(cards.map((c) => [c.id, c]));
+    const placed = new Set<number>();
+    for (const k of Object.keys(out) as Slot[]) {
+      for (const id of arranged[k] ?? []) {
+        const c = byId.get(id);
+        if (c && !placed.has(id)) {
+          out[k].push(c);
+          placed.add(id);
+        }
+      }
+    }
+    for (const c of cards) if (!placed.has(c.id)) out[defaultSlot(c)].push(c);
+    return out;
+  })();
+  const midUsed = COLS.some((c) => mySlots[`mid-${c}`].length > 0);
   const tagFor = (c: CardView) => {
     if (view.hints.undo_mana.includes(c.id) && mode.kind === "idle") return "↺ click to untap";
     if (attacks.has(c.id)) return `→ ${view.players[attacks.get(c.id)!].name}`;
@@ -737,7 +771,6 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     return [...kept, ...view.hand.filter((c) => !known.has(c.id))];
   })();
   const opp = rowsFor(focused.id);
-  const mine = rowsFor(view.you);
   const myCommand = me.command;
 
   // ---------------------------------------------------------------- primary button
@@ -764,6 +797,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (kind === "DeclareAttackers") return "Drag a creature onto the player to attack, or click it to attack " + focused.name + ".";
     if (kind === "DeclareBlockers") return pickedBlocker !== null ? "Now pick the attacker to block." : "Drag a blocker onto the attacker it blocks.";
     if (kind === "AssignCombatDamage") return "Divide your attacker's damage among its blockers.";
+    if (kind === "CommanderZone") return "Choose where your commander goes.";
     if (kind === "Priority" && view.stack.length > 0) return "You can respond, or let the top of the stack resolve.";
     return view.active === view.you ? "Your turn" : `${view.players[view.active].name}'s turn`;
   })();
@@ -889,9 +923,22 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       </div>
 
       {/* My board */}
-      <section className="board board-me theme-surface" data-theme={settings.theme} title={drag?.kind === "arrange" ? "Drop into either row" : undefined}>
-        {renderRow(mine.front, "row-front")}
-        {renderRow([...mine.lands, ...mine.support], "row-back")}
+      <section className={`board board-me theme-surface ${midUsed || drag?.kind === "arrange" ? "three-rows" : ""}`} data-theme={settings.theme}>
+        {ROWS.map((r) => (
+          <div key={r} className={`row row-${r} row-slots`}>
+            {COLS.map((c) => {
+              const slot: Slot = `${r}-${c}`;
+              return (
+                <div key={c} className={`cell cell-${c}`} data-slot={slot}>
+                  <span className="cell-label">{SLOT_NAMES[slot]}</span>
+                  {mySlots[slot].map((card) => (
+                    <Card key={card.id} card={card} size="field" glow={glowFor(card)} onClick={() => clickPermanent(card)} onHover={setHover} onInspect={setInspect} badge={tagFor(card)} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </section>
 
       {/* Bottom: command zone, hand, medallion, piles, action */}
@@ -1067,6 +1114,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       {kind === "Mulligan" && view.your_decision && <MulliganModal view={view} act={act} onHover={setHover} />}
       {(trigs.length > 1 || (trigs.length === 1 && startedTrigger.current === triggerKey)) && mode.kind === "idle" && <TriggerModal view={view} onDone={startTriggers} />}
       {kind === "AssignCombatDamage" && view.your_decision && <DamageModal key={JSON.stringify(view.decision)} view={view} act={act} onHover={setHover} />}
+      {kind === "CommanderZone" && view.your_decision && <CommanderModal view={view} act={act} />}
       {kind === "Discard" && view.your_decision && <DiscardModal view={view} act={act} onHover={setHover} />}
       {kind === "GameOver" && <GameOverModal view={view} onExit={onExit} />}
 
