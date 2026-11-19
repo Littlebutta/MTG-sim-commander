@@ -4,10 +4,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lookupCards, searchCards, type CardSummary } from "../decks";
 import type { CardView } from "../engine/types";
+import { BuilderScreen } from "../ui/BuilderScreen";
 import { Card, CardPreview } from "../ui/Card";
 import { checkAdventureDeck, type AdventureDeckCheck } from "./api";
 import { personSprite } from "./art";
-import { BASICS, BOSS_IDS, DUELIST_IDS, ENDGAME_IDS, PEOPLE, REAGENTS, SIGILS, isBasic, listText, type Person } from "./content";
+import { BASICS, BOSS_IDS, DUELIST_IDS, ENDGAME_IDS, PEOPLE, REAGENTS, SIGILS, listText, type Person } from "./content";
+import { DEFAULT_POOLS, POOLS, poolSize, type PoolId } from "./pools";
 import { formatTime, type Save } from "./save";
 import { WORLD } from "./world";
 
@@ -75,154 +77,50 @@ export function Portrait({ person, size = 96, flip = false }: { person: Person |
   return <img className="adv-portrait" src={url} width={size} height={size} alt="" draggable={false} />;
 }
 
-function colorKey(c: CardSummary): string {
-  if (c.type_line.includes("Land")) return "L";
-  const id = c.color_identity;
-  if (!id) return "C";
-  return id.length > 1 ? "M" : id;
-}
-
 // ---------------------------------------------------------------- spellbook (deck)
 
-const FILTERS: { id: string; label: string }[] = [
-  { id: "all", label: "All" }, { id: "W", label: "White" }, { id: "U", label: "Blue" }, { id: "B", label: "Black" },
-  { id: "R", label: "Red" }, { id: "G", label: "Green" }, { id: "M", label: "Gold" }, { id: "C", label: "Colorless" },
-];
-
-function Spellbook({ save, onChange }: { save: Save; onChange: () => void }) {
-  const owned = Object.keys(save.collection).filter((n) => save.collection[n] > 0);
-  const names = [...owned, ...Object.keys(save.deck), ...BASICS];
-  const sums = useSummaries(names);
-  const [filter, setFilter] = useState("all");
-  const [text, setText] = useState("");
-  const [hover, setHover] = useState<CardSummary | null>(null);
+/** Your deck, built with the same tools as the main deck builder, from the cards you carry. */
+export function Spellbook({ save, onChange, onClose }: { save: Save; onChange: () => void; onClose: () => void }) {
   const [check, setCheck] = useState<AdventureDeckCheck | null>(null);
-  const deck = save.deck;
-  const deckText = listText(deck);
+  const [text, setText] = useState(listText(save.deck));
   useEffect(() => {
     let live = true;
-    checkAdventureDeck(deckText).then((c) => live && setCheck(c)).catch(() => {});
+    const t = setTimeout(() => checkAdventureDeck(text).then((c) => live && setCheck(c)).catch(() => {}), 150);
     return () => {
       live = false;
+      clearTimeout(t);
     };
-  }, [deckText]);
-
-  const count = Object.values(deck).reduce((a, b) => a + b, 0);
-  const canAdd = (n: string) => isBasic(n) || (deck[n] ?? 0) < Math.min(4, save.collection[n] ?? 0);
-  const add = (n: string) => {
-    if (!canAdd(n)) return;
-    deck[n] = (deck[n] ?? 0) + 1;
-    onChange();
-  };
-  const remove = (n: string) => {
-    if (!deck[n]) return;
-    deck[n] -= 1;
-    if (deck[n] <= 0) delete deck[n];
-    onChange();
-  };
-
-  const shown = owned
-    .map((n) => sums.get(n))
-    .filter((s): s is CardSummary => !!s)
-    .filter((s) => filter === "all" || colorKey(s) === filter)
-    .filter((s) => !text || s.name.toLowerCase().includes(text.toLowerCase()) || s.type_line.toLowerCase().includes(text.toLowerCase()) || s.oracle_text.toLowerCase().includes(text.toLowerCase()))
-    .sort((a, b) => a.mana_value - b.mana_value || a.name.localeCompare(b.name));
-
-  const groups: [string, (s: CardSummary) => boolean][] = [
-    ["Creatures", (s) => s.type_line.includes("Creature")],
-    ["Spells", (s) => !s.type_line.includes("Creature") && !s.type_line.includes("Land")],
-    ["Lands", (s) => s.type_line.includes("Land")],
-  ];
-  const curve = Array(8).fill(0);
-  for (const [n, k] of Object.entries(deck)) {
-    const s = sums.get(n);
-    if (s && !s.type_line.includes("Land")) curve[Math.min(7, s.mana_value)] += k;
-  }
-  const peak = Math.max(1, ...curve);
-
+  }, [text]);
+  useKeys(["Escape"], onClose, 200);
   return (
-    <div className="adv-book">
-      <div className="adv-book-left">
-        <div className="adv-filters">
-          {FILTERS.map((f) => (
-            <button key={f.id} className={`adv-chip ${filter === f.id ? "on" : ""}`} onClick={() => setFilter(f.id)}>{f.label}</button>
-          ))}
-          <input className="adv-search" placeholder="Search your cards" value={text} onChange={(e) => setText(e.target.value)} />
-        </div>
-        <div className="adv-collection">
-          {shown.length === 0 && <p className="adv-muted">No cards here yet. Explore, duel, and look in the tall grass.</p>}
-          {shown.map((s) => {
-            const inDeck = deck[s.name] ?? 0;
-            const have = save.collection[s.name] ?? 0;
-            return (
-              <div key={s.name} className={`adv-coll-card ${canAdd(s.name) ? "" : "maxed"}`} onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(null)}>
-                <Card card={asView(s)} size="hand" onClick={() => add(s.name)} onInspect={() => remove(s.name)} />
-                <div className="adv-coll-count">
-                  <span title="In your deck / owned">{inDeck}/{have}</span>
-                  {inDeck > 0 && <button className="adv-mini" onClick={() => remove(s.name)} title="Take one out">−</button>}
-                  {canAdd(s.name) && <button className="adv-mini" onClick={() => add(s.name)} title="Put one in">+</button>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="adv-muted small">Click a card to put a copy in your deck, right-click to take one out. A deck may carry up to four of any card, and as many basic lands as you like.</p>
-      </div>
-      <div className="adv-book-right">
-        <div className="adv-deck-head">
-          <input className="adv-deckname" value={save.deckName} onChange={(e) => { save.deckName = e.target.value; onChange(); }} aria-label="Deck name" />
-          <span className={`adv-count ${count >= 40 ? "ok" : ""}`}>{count} cards</span>
-        </div>
-        <div className="adv-curve" title="Mana curve">
-          {curve.map((n, i) => (
-            <div key={i} className="adv-curve-col">
-              <div className="adv-curve-bar" style={{ height: `${(n / peak) * 100}%` }} />
-              <span>{i === 7 ? "7+" : i}</span>
+    <div className="adv-builder">
+      <BuilderScreen
+        onBack={onClose}
+        collection={{
+          title: `${save.name}'s spellbook`,
+          name: save.deckName,
+          cards: save.deck,
+          owned: save.collection,
+          basics: BASICS,
+          maxCopies: 4,
+          minCards: 40,
+          backLabel: "Back to the road",
+          onChange: (name, cards) => {
+            save.deckName = name;
+            save.deck = { ...cards };
+            setText(listText(save.deck));
+            onChange();
+          },
+          status: check && (
+            <div className={`adv-build-status ${check.playable ? "ok" : "bad"}`}>
+              {check.playable
+                ? "Ready for the road."
+                : check.problems[0] ?? (check.unknown.length ? `Unknown: ${check.unknown.join(", ")}` : "Not ready yet.")}
+              <span className="muted"> · Up to 4 of any card you own, basic lands as many as you like, at least 40 cards.</span>
             </div>
-          ))}
-        </div>
-        {check && (
-          <div className={`adv-status ${check.playable ? "ok" : "bad"}`}>
-            {check.playable ? "Ready for the road." : check.problems[0] ?? (check.unknown.length ? `Unknown: ${check.unknown.join(", ")}` : "Not ready yet.")}
-          </div>
-        )}
-        <div className="adv-decklist">
-          {groups.map(([label, test]) => {
-            const rows = Object.entries(deck).filter(([n]) => {
-              const s = sums.get(n);
-              return s ? test(s) && !isBasic(n) : label === "Spells" && !isBasic(n);
-            });
-            if (rows.length === 0) return null;
-            return (
-              <div key={label}>
-                <div className="adv-deck-group">{label} · {rows.reduce((a, [, k]) => a + k, 0)}</div>
-                {rows.sort((a, b) => (sums.get(a[0])?.mana_value ?? 0) - (sums.get(b[0])?.mana_value ?? 0)).map(([n, k]) => (
-                  <div key={n} className="adv-deck-row" onMouseEnter={() => sums.get(n) && setHover(sums.get(n)!)} onMouseLeave={() => setHover(null)} onClick={() => remove(n)} title="Click to take one out">
-                    <span className="adv-deck-n">{k}</span>
-                    <span className="adv-deck-name">{n}</span>
-                    <span className="adv-deck-cost">{sums.get(n)?.mana_cost.replace(/[{}]/g, "")}</span>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-          <div className="adv-deck-group">Basic lands · {BASICS.reduce((a, b) => a + (deck[b] ?? 0), 0)}</div>
-          <div className="adv-basics">
-            {BASICS.map((b) => (
-              <div key={b} className="adv-basic">
-                <span className={`adv-land l-${b}`} />
-                <span className="adv-basic-name">{b}</span>
-                <button className="adv-mini" onClick={() => remove(b)}>−</button>
-                <span className="adv-deck-n">{deck[b] ?? 0}</span>
-                <button className="adv-mini" onClick={() => add(b)}>+</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      {hover && (
-        <div className="adv-hover"><CardPreview card={asView(hover)} /></div>
-      )}
+          ),
+        }}
+      />
     </div>
   );
 }
@@ -301,10 +199,54 @@ function Journey({ save }: { save: Save }) {
   );
 }
 
+// ---------------------------------------------------------------- card pools
+
+function Pools({ save, onChange }: { save: Save; onChange: () => void }) {
+  const on = save.pools?.length ? save.pools : DEFAULT_POOLS;
+  const [size, setSize] = useState<number | null>(null);
+  const key = on.join(",");
+  useEffect(() => {
+    let live = true;
+    setSize(null);
+    poolSize(on).then((n) => live && setSize(n)).catch(() => {});
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const toggle = (id: PoolId) => {
+    const next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
+    if (next.length === 0) return;
+    save.pools = POOLS.map((p) => p.id).filter((x) => next.includes(x));
+    onChange();
+  };
+  return (
+    <div className="adv-pools">
+      <h3>Cards you can find</h3>
+      <p className="adv-muted">Where the cards lying around the Vale come from. Change it whenever you like; cards you've already found stay yours.</p>
+      <div className="adv-pool-list">
+        {POOLS.map((p) => (
+          <label key={p.id} className={`adv-pool ${on.includes(p.id) ? "on" : ""}`}>
+            <input type="checkbox" checked={on.includes(p.id)} onChange={() => toggle(p.id)} />
+            <span>
+              <strong>{p.name}</strong>
+              <span className="adv-muted">{p.text}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="adv-muted small">{size === null ? "Counting cards…" : `${size.toLocaleString()} different cards to find.`}</p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- journal
 
-export function Journal({ save, onChange, onClose, onQuit }: { save: Save; onChange: () => void; onClose: () => void; onQuit: () => void }) {
-  const [tab, setTab] = useState<"book" | "satchel" | "journey">("book");
+export function Journal({ save, onChange, onClose, onQuit, onSpellbook, onNewJourney }: {
+  save: Save; onChange: () => void; onClose: () => void; onQuit: () => void; onSpellbook: () => void; onNewJourney: () => void;
+}) {
+  const [tab, setTab] = useState<"satchel" | "journey" | "options">("journey");
+  const [confirm, setConfirm] = useState(false);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" || (e.key === "Tab" && !(e.target instanceof HTMLInputElement))) {
@@ -320,17 +262,36 @@ export function Journal({ save, onChange, onClose, onQuit }: { save: Save; onCha
       <div className="adv-journal">
         <div className="adv-journal-tabs">
           <span className="adv-journal-owner">{save.name}'s journal</span>
-          <button className={tab === "book" ? "on" : ""} onClick={() => setTab("book")}>Spellbook</button>
-          <button className={tab === "satchel" ? "on" : ""} onClick={() => setTab("satchel")}>Satchel</button>
+          <button onClick={onSpellbook}>Spellbook</button>
           <button className={tab === "journey" ? "on" : ""} onClick={() => setTab("journey")}>Journey</button>
+          <button className={tab === "satchel" ? "on" : ""} onClick={() => setTab("satchel")}>Satchel</button>
+          <button className={tab === "options" ? "on" : ""} onClick={() => setTab("options")}>Options</button>
           <span className="adv-grow" />
-          <button className="adv-quiet" onClick={onQuit} title="Your journey is saved">Rest for now</button>
+          <button className="adv-quiet" onClick={onQuit} title="Your journey is saved">Leave the Vale</button>
           <button className="adv-close" onClick={onClose} aria-label="Close journal">✕</button>
         </div>
         <div className="adv-journal-body">
-          {tab === "book" && <Spellbook save={save} onChange={onChange} />}
           {tab === "satchel" && <Satchel save={save} />}
           {tab === "journey" && <Journey save={save} />}
+          {tab === "options" && (
+            <div className="adv-options">
+              <Pools save={save} onChange={onChange} />
+              <h3>Music</h3>
+              <p className="adv-muted">Press M, or the Music button in the corner, to turn the music on or off. Your choice is remembered.</p>
+              <h3>A fresh start</h3>
+              {!confirm ? (
+                <button className="adv-btn danger" onClick={() => setConfirm(true)}>Begin a new journey</button>
+              ) : (
+                <div className="adv-confirm">
+                  <p>Starting over forgets {save.name}'s journey: every card, sigil and rival. Are you sure?</p>
+                  <div className="adv-actions">
+                    <button className="adv-btn" onClick={() => setConfirm(false)}>Keep it</button>
+                    <button className="adv-btn danger" onClick={onNewJourney}>Start over</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

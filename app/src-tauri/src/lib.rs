@@ -240,6 +240,7 @@ pub fn run() {
             steam_send,
             adventure::load_adventure,
             adventure::save_adventure,
+            adventure::delete_adventure,
             adventure::check_adventure_deck,
             adventure::resolve_adventure_deck
         ])

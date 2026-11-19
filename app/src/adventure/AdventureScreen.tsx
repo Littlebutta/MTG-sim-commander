@@ -10,10 +10,13 @@ import type { PlayerView } from "../engine/types";
 import { Table } from "../ui/Table";
 import { checkAdventureDeck, startDuel } from "./api";
 import type { Dir } from "./art";
-import { DECKS, PEOPLE, REAGENTS, STARTERS, chaosDeck, isBasic, listText, lostCard, parseList, type Person } from "./content";
-import { Cauldron, DuelIntro, Found, Journal, Portrait, Spoils } from "./panels";
-import { addCard, formatTime, loadSave, newSave, writeSave, type Save } from "./save";
-import { WORLD, World, type Actor, type WorldEvent, type WorldObject } from "./world";
+import { DECKS, PEOPLE, REAGENTS, SIGILS, STARTERS, chaosDeck, isBasic, listText, parseList, type Person } from "./content";
+import { Cauldron, DuelIntro, Found, Journal, Portrait, Spellbook, Spoils } from "./panels";
+import { startMusic, stopMusic, setMusicMood, toggleMusic, musicMuted } from "./music";
+import { findCard } from "./pools";
+import { addCard, deleteSave, formatTime, lastSlot, loadSlots, newSave, writeSave, type Save } from "./save";
+import { uiScale } from "../scale";
+import { PLAYER_LOOK, WORLD, World, type Actor, type WorldEvent, type WorldObject } from "./world";
 
 type Overlay =
   | { kind: "none" }
@@ -22,7 +25,9 @@ type Overlay =
   | { kind: "found"; card?: string; reagent?: string; sigil?: string; resolve: () => void }
   | { kind: "spoils"; title: string; options: string[]; picks: number; resolve: (c: string[]) => void }
   | { kind: "intro"; person: Person; resolve: (go: boolean) => void; canFlee: boolean }
+  | { kind: "ask"; speaker: Person | null; text: string; placeholder: string; resolve: (v: string) => void }
   | { kind: "journal" }
+  | { kind: "spellbook" }
   | { kind: "cauldron"; resolve: (r: { reagent: string; card: string } | null) => void }
   | { kind: "ending" };
 
@@ -97,60 +102,84 @@ function ChoiceList({ options, onPick }: { options: { label: string; hint?: stri
   );
 }
 
-// ---------------------------------------------------------------- title
+// ---------------------------------------------------------------- save slots
 
-function TitleScreen({ save, onContinue, onNew, onBack }: { save: Save | null; onContinue: () => void; onNew: (name: string) => void; onBack: () => void }) {
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState("");
-  const [confirm, setConfirm] = useState(false);
+/** Pick a journey to continue, or a slot to begin a new one in. */
+function SlotPicker({ onPick, onBack }: { onPick: (slot: number, save: Save | null) => void; onBack: () => void }) {
+  const [slots, setSlots] = useState<(Save | null)[] | null>(null);
+  const [confirm, setConfirm] = useState<number | null>(null);
+  useEffect(() => {
+    loadSlots().then(setSlots);
+  }, []);
+  const last = lastSlot();
   return (
-    <div className="adv-title">
-      <div className="adv-title-sky" />
-      <div className="adv-title-hills" />
-      <div className="adv-title-card">
-        <div className="adv-title-kicker">A journey through</div>
-        <h1 className="adv-title-logo">Elderreach</h1>
-        {!naming && (
-          <div className="adv-title-menu">
-            {save && (
-              <button className="adv-btn primary big" onClick={onContinue}>
-                Continue the journey
-                <span className="adv-btn-sub">{save.name} · {formatTime(save.playtime)} · {save.sigils.length} of 5 sigils</span>
-              </button>
-            )}
-            <button className={`adv-btn big ${save ? "" : "primary"}`} onClick={() => (save ? setConfirm(true) : setNaming(true))}>Begin a new journey</button>
-            <button className="adv-btn quiet" onClick={onBack}>Back to the table</button>
-            {confirm && (
-              <div className="adv-confirm">
-                <p>Starting over forgets {save?.name}'s journey: every card, sigil and rival. Are you sure?</p>
-                <div className="adv-actions center">
-                  <button className="adv-btn" onClick={() => setConfirm(false)}>Keep it</button>
-                  <button className="adv-btn danger" onClick={() => { setConfirm(false); setNaming(true); }}>Start over</button>
+    <div className="screen adv-slots">
+      <header className="screen-head">
+        <button className="ghost" onClick={onBack}>← Back</button>
+        <h2>Adventure</h2>
+        <span />
+      </header>
+      <div className="adv-slot-list">
+        {!slots && <p className="muted">Looking for your journeys…</p>}
+        {slots?.map((s, i) => {
+          const slot = i + 1;
+          return (
+            <div key={slot} className={`adv-slot ${s ? "" : "empty"} ${s && slot === last ? "last" : ""}`}>
+              <div className="adv-slot-main">
+                {s ? <Portrait person={{ look: PLAYER_LOOK }} size={56} /> : <span className="adv-slot-n">{slot}</span>}
+                <div className="adv-slot-text">
+                  <strong>{s ? s.name || "A new traveler" : `Journey ${slot}`}</strong>
+                  {s ? (
+                    <span className="muted">
+                      {formatTime(s.playtime)} on the road · {s.sigils.length} of {Object.keys(SIGILS).length} sigils · {Object.values(s.collection).reduce((a, b) => a + b, 0)} cards · {s.wins} wins
+                      <br />Saved {new Date(s.saved).toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="muted">Empty</span>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        )}
-        {naming && (
-          <form className="adv-title-menu" onSubmit={(e) => { e.preventDefault(); onNew(name.trim() || "Wren"); }}>
-            <label className="adv-name-label">What do they call you, traveler?</label>
-            <input className="adv-name" autoFocus maxLength={16} placeholder="Wren" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="adv-btn primary big" type="submit">Set out</button>
-            <button className="adv-btn quiet" type="button" onClick={() => setNaming(false)}>Back</button>
-          </form>
-        )}
-        <p className="adv-title-hint">Arrow keys or WASD to walk · Shift to run · E or Space to talk · Esc for your journal</p>
+              <div className="adv-slot-actions">
+                {s && confirm !== slot && <button className="btn" onClick={() => setConfirm(slot)}>Delete</button>}
+                {s && confirm === slot && (
+                  <>
+                    <span className="muted small">Delete this journey?</span>
+                    <button className="btn" onClick={() => setConfirm(null)}>Keep</button>
+                    <button className="btn btn-primary danger" onClick={async () => { await deleteSave(slot); setConfirm(null); setSlots(await loadSlots()); }}>Delete</button>
+                  </>
+                )}
+                <button className="btn btn-primary" onClick={() => onPick(slot, s)} autoFocus={slot === last}>{s ? "Continue" : "Begin a journey"}</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
+      <p className="muted small adv-slot-hint">Your journey saves itself as you go: at every touchstone, door and find, and every few seconds while you walk.</p>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- a typed answer
+
+function AskBox({ speaker, text, placeholder, onDone }: { speaker: Person | null; text: string; placeholder: string; onDone: (v: string) => void }) {
+  const [v, setV] = useState("");
+  return (
+    <DialogueBox speaker={speaker} text={text}>
+      <form className="adv-ask" onSubmit={(e) => { e.preventDefault(); onDone(v.trim() || placeholder); }} onClick={(e) => e.stopPropagation()}>
+        <input className="adv-name" autoFocus maxLength={16} placeholder={placeholder} value={v} onChange={(e) => setV(e.target.value)} />
+        <button className="adv-btn primary" type="submit">That's me</button>
+      </form>
+    </DialogueBox>
   );
 }
 
 // ---------------------------------------------------------------- the adventure
 
 export function AdventureScreen({ onExit }: { onExit: () => void }) {
-  const [loaded, setLoaded] = useState(false);
-  const [save, setSave] = useState<Save | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [slot, setSlot] = useState<number | null>(null);
+  const slotRef = useRef(1);
+  const [muted, setMuted] = useState(musicMuted());
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [banner, setBanner] = useState<{ key: number; text: string } | null>(null);
   const [duel, setDuel] = useState<{ session: GameSession; done: (won: boolean) => void } | null>(null);
@@ -162,17 +191,28 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   const busyRef = useRef(false);
   const heldRef = useRef<Dir[]>([]);
   const runRef = useRef(false);
-
-  useEffect(() => {
-    loadSave().then((s) => {
-      setSave(s);
-      setLoaded(true);
-    });
-  }, []);
+  /** Open the spellbook once the current conversation ends. */
+  const thenSpellbookRef = useRef(false);
 
   const persist = useCallback(() => {
-    if (worldRef.current) void writeSave(worldRef.current.save);
+    if (worldRef.current) void writeSave(worldRef.current.save, slotRef.current);
   }, []);
+
+  // Save when the window is closed or hidden, so quitting never loses the walk since the last save.
+  useEffect(() => {
+    if (!playing) return;
+    const flush = () => persist();
+    const vis = () => document.visibilityState === "hidden" && persist();
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", vis);
+      persist();
+    };
+  }, [playing, persist]);
 
   // ---- overlay helpers (scripts await these)
   const say = (speaker: Person | null, text: string) => new Promise<void>((resolve) => setOverlay({ kind: "say", speaker, text, resolve }));
@@ -181,6 +221,8 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   };
   const choose = (speaker: Person | null, text: string, options: { label: string; hint?: string; color?: string }[]) =>
     new Promise<number>((resolve) => setOverlay({ kind: "choose", speaker, text, options, resolve }));
+  const ask = (speaker: Person | null, text: string, placeholder: string) =>
+    new Promise<string>((resolve) => setOverlay({ kind: "ask", speaker, text, placeholder, resolve }));
   const showFound = (f: { card?: string; reagent?: string; sigil?: string }) => new Promise<void>((resolve) => setOverlay({ kind: "found", ...f, resolve }));
   const close = () => setOverlay({ kind: "none" });
   const name = (s: string) => s.replace(/\{name\}/g, worldRef.current?.save.name ?? "traveler");
@@ -194,15 +236,23 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
     } finally {
       busyRef.current = false;
       heldRef.current = [];
-      close();
+      if (thenSpellbookRef.current) {
+        thenSpellbookRef.current = false;
+        setOverlay({ kind: "spellbook" });
+      } else close();
     }
   }
 
   async function bramIntro(w: World) {
     const bram = PEOPLE.bram;
     const s = w.save;
+    if (!s.name) {
+      await say(bram, "Ah! There you are. Come in, come in, mind the boxes.");
+      s.name = (await ask(bram, "Now, my memory's not what it was. Remind me your name?", "Wren")).slice(0, 16);
+      persist();
+    }
     await sayAll(bram, [
-      name(`Ah, {name}! There you are. Come in, come in, mind the boxes.`),
+      name(`{name}, of course! How could I forget.`),
       "Forty years I've kept this shop, and every one of those years someone your age walks in with that look. The road look.",
       "Well. I can't send you out there empty-handed, can I? The Vale's full of duelists, and every one of them will want a match.",
       "I've put together seven decks for travelers just starting out. Simple ones. Each knows one thing and does it well. Pick the one that speaks to you.",
@@ -234,7 +284,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       "Out there you'll find cards lying about, lost by careless travelers. Some in plain sight, some hidden in tall grass. Keep your eyes open for a glint.",
       "Win a duel and your opponent will usually let you take a card from their deck. That's the custom.",
       "Build your deck any way you like. No rules on the road, except one: no more than four copies of any card. Lands from the earth are free, take as many as you need.",
-      "Open your journal with Esc to see your cards and change your deck.",
+      "Open your journal with Esc to see your cards, and your spellbook to change your deck.",
       "And if you ever find something truly rare, a strange root or a glowing stone, take it to Ysolde in her tower by the crossroads. Her cauldron can brew it into any spell you can name.",
       "The touchstones out there will remember you. Touch one, and if you're ever beaten, you'll wake beside it. The one in the village square is closest.",
       "Go on, then. The road's waiting. And come back and tell me about it sometime.",
@@ -311,9 +361,16 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
     s.flags[`met:${id}`] = true;
     const check = await checkAdventureDeck(listText(s.deck));
     if (!check.playable) {
-      await say(null, `Your deck isn't ready for a duel: ${check.problems[0] ?? "something's missing"}. Open your journal (Esc) to fix it.`);
+      // Don't let them keep challenging you: they wait while you fix your deck.
+      // (saved, so they stay patient after you quit and come back)
+      s.flags[`wait:${id}`] = true;
+      persist();
+      await say(p, "Hold on, your deck's not ready for a proper duel. Go on, sort it out. I'll wait right here.");
+      await say(null, `${check.problems[0] ?? "Your deck isn't ready"}. Your spellbook opens so you can fix it. Talk to ${p.name} when you're ready.`);
+      thenSpellbookRef.current = true;
       return;
     }
+    delete s.flags[`wait:${id}`];
     const go = await new Promise<boolean>((resolve) => setOverlay({ kind: "intro", person: p, resolve, canFlee }));
     if (!go) {
       await say(p, "Another time, then.");
@@ -436,7 +493,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         return run(async () => {
           s.flags[`got:${w.mapId}:${o.id}`] = true;
           if (o.kind === "card") {
-            const card = lostCard(`${w.mapId}:${o.id}`, o.region ?? "meadow", !!o.hidden);
+            const card = await findCard(`${w.mapId}:${o.id}`, o.region ?? "meadow", !!o.hidden, s.pools ?? []);
             addCard(s, card);
             persist();
             await showFound({ card });
@@ -500,8 +557,8 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
   const begin = (s: Save) => {
     const w = new World(s);
     worldRef.current = w;
-    setSave(s);
     setPlaying(true);
+    startMusic();
     const r = w.region();
     if (r) {
       w.lastRegion = r.id;
@@ -526,7 +583,7 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         if (!paused) {
           w.save.playtime += dt;
           saveTimer += dt;
-          if (saveTimer > 60) {
+          if (saveTimer > 15) {
             saveTimer = 0;
             persist();
           }
@@ -534,13 +591,16 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         const ev = w.update(dt, { held: heldRef.current, run: runRef.current }, paused);
         if (ev) void handle(w, ev);
         const dpr = window.devicePixelRatio || 1;
-        const W = Math.floor(cv.clientWidth * dpr);
-        const H = Math.floor(cv.clientHeight * dpr);
+        // The interface is zoomed as a whole (see scale.ts); draw at real screen pixels.
+        const px = dpr * (uiScale() || 1);
+        const W = Math.floor(cv.clientWidth * px);
+        const H = Math.floor(cv.clientHeight * px);
         if (cv.width !== W || cv.height !== H) {
           cv.width = W;
           cv.height = H;
         }
         const scale = Math.max(2, Math.round(H / (13.5 * 16)));
+        setMusicMood(w.mapId === "overworld" ? w.region()?.id ?? "meadow" : w.mapId);
         w.draw(cv.getContext("2d")!, W, H, scale);
       }
       raf = requestAnimationFrame(loop);
@@ -563,6 +623,10 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         return;
       }
       if (e.key === "Shift") runRef.current = true;
+      if ((e.key === "m" || e.key === "M") && overlayRef.current.kind !== "spellbook" && overlayRef.current.kind !== "ask") {
+        setMuted(toggleMusic());
+        return;
+      }
       const w = worldRef.current;
       if (!w || busyRef.current || overlayRef.current.kind !== "none") return;
       if (e.key === "e" || e.key === "E" || e.key === " " || e.key === "Enter") {
@@ -597,7 +661,25 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
 
   // ---------------------------------------------------------------- render
 
-  if (!loaded) return <div className="adv-root" />;
+  useEffect(() => () => stopMusic(), []);
+  useEffect(() => {
+    if (duel) setMusicMood("duel");
+  }, [duel]);
+  if (slot === null) {
+    return (
+      <SlotPicker
+        onBack={onExit}
+        onPick={(n, s) => {
+          slotRef.current = n;
+          setSlot(n);
+          const save = s ?? newSave("", WORLD.start);
+          if (!s) void writeSave(save, n);
+          begin(save);
+        }}
+      />
+    );
+  }
+  if (!playing || !worldRef.current) return <div className="adv-root" />;
   if (duel) {
     // Adventure duels have no commanders, so the command zones are hidden (see adventure.css).
     return (
@@ -613,21 +695,6 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
       </div>
     );
   }
-  if (!playing) {
-    return (
-      <TitleScreen
-        save={save}
-        onBack={onExit}
-        onContinue={() => save && begin(save)}
-        onNew={(n) => {
-          const s = newSave(n, WORLD.start);
-          void writeSave(s);
-          begin(s);
-        }}
-      />
-    );
-  }
-
   const w = worldRef.current!;
   const o = overlay;
   return (
@@ -637,8 +704,14 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
         <div key={banner.key} className="adv-banner" onAnimationEnd={() => setBanner(null)}>{banner.text}</div>
       )}
       {o.kind === "none" && !busyRef.current && (
-        <button className="adv-journal-btn" onClick={() => setOverlay({ kind: "journal" })} title="Journal (Esc)">Journal</button>
+        <div className="adv-hud">
+          <button className="adv-journal-btn" onClick={() => setMuted(toggleMusic())} title="Music (M)">{muted ? "Music off" : "Music on"}</button>
+          <button className="adv-journal-btn" onClick={() => setOverlay({ kind: "spellbook" })} title="Your deck">Spellbook</button>
+          <button className="adv-journal-btn" onClick={() => setOverlay({ kind: "journal" })} title="Journal (Esc)">Journal</button>
+        </div>
       )}
+      {o.kind === "ask" && <AskBox speaker={o.speaker} text={o.text} placeholder={o.placeholder} onDone={(v) => { close(); o.resolve(v); }} />}
+      {o.kind === "spellbook" && <Spellbook save={w.save} onChange={() => { setTick((t) => t + 1); persist(); }} onClose={() => { persist(); close(); }} />}
       {o.kind === "say" && <DialogueBox speaker={o.speaker} text={o.text} onDone={() => { close(); o.resolve(); }} />}
       {o.kind === "choose" && (
         <DialogueBox speaker={o.speaker} text={o.text}>
@@ -654,7 +727,14 @@ export function AdventureScreen({ onExit }: { onExit: () => void }) {
           save={w.save}
           onChange={() => setTick((t) => t + 1)}
           onClose={() => { persist(); close(); }}
-          onQuit={() => { persist(); setPlaying(false); setOverlay({ kind: "none" }); setSave({ ...w.save }); }}
+          onQuit={async () => { if (worldRef.current) await writeSave(worldRef.current.save, slotRef.current); stopMusic(); onExit(); }}
+          onSpellbook={() => setOverlay({ kind: "spellbook" })}
+          onNewJourney={() => {
+            setOverlay({ kind: "none" });
+            const s = newSave("", WORLD.start);
+            void writeSave(s, slotRef.current);
+            begin(s);
+          }}
         />
       )}
       {o.kind === "ending" && (

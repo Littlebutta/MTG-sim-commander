@@ -4,6 +4,7 @@
 
 import { inTauri } from "../decks";
 import type { Dir } from "./art";
+import type { PoolId } from "./pools";
 
 export interface Place {
   map: string;
@@ -34,6 +35,8 @@ export interface Save extends Place {
   wins: number;
   losses: number;
   brews: number;
+  /** Which card pools lost cards come from. Missing in older saves: the Vale's own cards. */
+  pools?: PoolId[];
   created: number;
   saved: number;
 }
@@ -47,33 +50,79 @@ export function newSave(name: string, start: Place): Save {
   };
 }
 
-export async function loadSave(): Promise<Save | null> {
+export const SLOTS = [1, 2, 3];
+
+/** Slot 1 uses the key the single save always had, so older journeys show up there. */
+const lsKey = (slot: number) => (slot === 1 ? LS : `${LS}-${slot}`);
+
+function valid(raw: unknown): Save | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Save;
+  if (s.v !== 1 || typeof s.map !== "string" || !s.deck || !s.collection) return null;
+  // Fill anything an older save is missing.
+  return { ...newSave(s.name ?? "", { map: s.map, x: s.x, y: s.y, dir: s.dir }), ...s };
+}
+
+export async function loadSave(slot: number): Promise<Save | null> {
   try {
     let raw: unknown;
     if (inTauri()) {
       const { invoke } = await import("@tauri-apps/api/core");
-      raw = await invoke("load_adventure");
+      raw = await invoke("load_adventure", { slot });
     } else {
-      raw = JSON.parse(localStorage.getItem(LS) ?? "null");
+      raw = JSON.parse(localStorage.getItem(lsKey(slot)) ?? "null");
     }
-    if (raw && typeof raw === "object" && (raw as Save).v === 1) return raw as Save;
+    return valid(raw);
   } catch {
-    /* no save, or unreadable */
+    return null;
   }
-  return null;
 }
 
-export async function writeSave(save: Save): Promise<void> {
+export async function loadSlots(): Promise<(Save | null)[]> {
+  return Promise.all(SLOTS.map(loadSave));
+}
+
+/** Which slot was played last, to put it first. */
+export function lastSlot(): number {
+  try {
+    const n = Number(localStorage.getItem(`${LS}-last`));
+    return SLOTS.includes(n) ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export async function writeSave(save: Save, slot: number): Promise<boolean> {
   save.saved = Date.now();
+  try {
+    localStorage.setItem(`${LS}-last`, String(slot));
+  } catch {
+    /* fine */
+  }
   try {
     if (inTauri()) {
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("save_adventure", { save });
+      await invoke("save_adventure", { slot, save });
     } else {
-      localStorage.setItem(LS, JSON.stringify(save));
+      localStorage.setItem(lsKey(slot), JSON.stringify(save));
     }
+    return true;
   } catch (e) {
     console.warn("adventure save failed", e);
+    return false;
+  }
+}
+
+export async function deleteSave(slot: number): Promise<void> {
+  try {
+    if (inTauri()) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("delete_adventure", { slot });
+    } else {
+      localStorage.removeItem(lsKey(slot));
+    }
+  } catch (e) {
+    console.warn("adventure delete failed", e);
   }
 }
 
