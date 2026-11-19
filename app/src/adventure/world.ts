@@ -1,0 +1,501 @@
+// The overworld: tile maps, walking, people who notice you, and drawing it all.
+
+import worldJson from "./data/world.json";
+import { ANIMATED, TILE, WALKABLE, paintObject, paintTile, personSprite, type Dir } from "./art";
+import { PEOPLE, REAGENTS, SIGILS, hashString } from "./content";
+import type { Place, Save } from "./save";
+
+export interface WorldObject {
+  kind: "npc" | "card" | "reagent" | "sign" | "warp" | "waystone" | "well" | "cauldron" | "gate";
+  x: number;
+  y: number;
+  id?: string;
+  dir?: Dir;
+  sight?: number;
+  text?: string;
+  region?: string;
+  hidden?: boolean;
+  chest?: boolean;
+  to?: string;
+  tx?: number;
+  ty?: number;
+}
+
+export interface MapData {
+  name: string;
+  theme: string;
+  w: number;
+  h: number;
+  tiles: string[];
+  objects: WorldObject[];
+}
+
+interface WorldFile {
+  start: Place;
+  regions: Record<string, { name: string; rect: [number, number, number, number] }>;
+  maps: Record<string, MapData>;
+}
+
+export const WORLD = worldJson as unknown as WorldFile;
+
+const DX: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+const OPPOSITE: Record<Dir, Dir> = { up: "down", down: "up", left: "right", right: "left" };
+const INSIDE_THEMES = new Set(["shop", "tower"]);
+const GROUND_CHARS = new Set(".,\"hmas:gfcpk".split(""));
+const SOLID_OBJECTS = new Set(["npc", "sign", "waystone", "well", "cauldron", "gate"]);
+
+export type WorldEvent =
+  | { type: "interact"; obj: WorldObject }
+  | { type: "challenge"; npc: Actor }
+  | { type: "warp"; obj: WorldObject }
+  | { type: "found"; obj: WorldObject }
+  | { type: "region"; id: string; name: string };
+
+/** A person on the map, with where they're standing and facing right now. */
+export interface Actor {
+  obj: WorldObject;
+  id: string;
+  x: number;
+  y: number;
+  /** Pixel offset while walking toward you. */
+  fx: number;
+  fy: number;
+  dir: Dir;
+  homeDir: Dir;
+  nextTurn: number;
+  alert: number;
+}
+
+interface Built {
+  data: MapData;
+  canvas: HTMLCanvasElement;
+  under: string[][];
+  masks: number[][];
+  animated: [number, number][];
+}
+
+const tileCache = new Map<string, HTMLCanvasElement>();
+function tileCanvas(ch: string, theme: string, variant: number, frame: number, mask: number, under: string, inside: boolean) {
+  const key = `${theme}|${ch}|${variant}|${frame}|${mask}|${under}|${inside ? 1 : 0}`;
+  let cv = tileCache.get(key);
+  if (!cv) {
+    cv = document.createElement("canvas");
+    cv.width = TILE;
+    cv.height = TILE;
+    paintTile(cv.getContext("2d")!, ch, theme, variant, frame, mask, under, inside);
+    tileCache.set(key, cv);
+  }
+  return cv;
+}
+
+const groupOf = (ch: string | undefined) => {
+  if (ch === undefined) return "edge";
+  if ("HNd".includes(ch)) return "house";
+  if ("Re".includes(ch)) return "rock";
+  if ("ZE".includes(ch)) return "spire";
+  return ch;
+};
+
+const builtMaps = new Map<string, Built>();
+function build(id: string): Built {
+  const hit = builtMaps.get(id);
+  if (hit) return hit;
+  const data = WORLD.maps[id];
+  const inside = INSIDE_THEMES.has(data.theme);
+  const at = (x: number, y: number) => (x >= 0 && y >= 0 && x < data.w && y < data.h ? data.tiles[y][x] : undefined);
+  const fallback = data.theme === "vale" ? "." : inside && data.theme === "shop" ? "f" : data.theme === "spire" || data.theme === "rift" ? "p" : "c";
+  const under: string[][] = [];
+  const masks: number[][] = [];
+  const animated: [number, number][] = [];
+  for (let y = 0; y < data.h; y++) {
+    under.push([]);
+    masks.push([]);
+    for (let x = 0; x < data.w; x++) {
+      const ch = data.tiles[y][x];
+      let u = fallback;
+      for (const [dx, dy] of [[0, 1], [-1, 0], [1, 0], [0, -1], [1, 1], [-1, 1]]) {
+        const n = at(x + dx, y + dy);
+        if (n && GROUND_CHARS.has(n) && n !== "k") {
+          u = n === "," || n === '"' ? "." : n;
+          break;
+        }
+      }
+      under[y].push(u);
+      const g = groupOf(ch);
+      let m = 0;
+      if (groupOf(at(x, y - 1)) !== g) m |= 1;
+      if (groupOf(at(x + 1, y)) !== g) m |= 2;
+      if (groupOf(at(x, y + 1)) !== g) m |= 4;
+      if (groupOf(at(x - 1, y)) !== g) m |= 8;
+      // Shores only show against land, not the map edge.
+      if (ch === "~") {
+        if (at(x, y - 1) === undefined) m &= ~1;
+        if (at(x, y + 1) === undefined) m &= ~4;
+        if (at(x - 1, y) === undefined) m &= ~8;
+        if (at(x + 1, y) === undefined) m &= ~2;
+      }
+      masks[y].push(m);
+      if (ANIMATED.has(ch)) animated.push([x, y]);
+    }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = data.w * TILE;
+  canvas.height = data.h * TILE;
+  const c = canvas.getContext("2d")!;
+  for (let y = 0; y < data.h; y++) {
+    for (let x = 0; x < data.w; x++) {
+      const variant = hashString(`${x},${y}`) % 4;
+      c.drawImage(tileCanvas(data.tiles[y][x], data.theme, variant, 0, masks[y][x], under[y][x], inside), x * TILE, y * TILE);
+    }
+  }
+  const b = { data, canvas, under, masks, animated };
+  builtMaps.set(id, b);
+  return b;
+}
+
+export interface Input {
+  held: Dir[];
+  run: boolean;
+}
+
+export class World {
+  mapId!: string;
+  map!: Built;
+  actors: Actor[] = [];
+  px = 0;
+  py = 0;
+  dir: Dir = "down";
+  /** Walking from (px,py) toward the next tile: 0..1. */
+  progress = 0;
+  moving: Dir | null = null;
+  stepCount = 0;
+  turnDelay = 0;
+  lastRegion = "";
+  time = 0;
+  /** A person walking up to challenge you. */
+  approaching: { actor: Actor; path: number; done: () => void } | null = null;
+  bump = 0;
+
+  constructor(public save: Save) {
+    this.enter({ map: save.map, x: save.x, y: save.y, dir: save.dir });
+  }
+
+  enter(p: Place) {
+    this.mapId = p.map;
+    this.map = build(p.map);
+    this.px = p.x;
+    this.py = p.y;
+    this.dir = p.dir;
+    this.moving = null;
+    this.progress = 0;
+    this.actors = this.map.data.objects
+      .filter((o) => o.kind === "npc" && o.id && PEOPLE[o.id])
+      .map((o) => ({ obj: o, id: o.id!, x: o.x, y: o.y, fx: 0, fy: 0, dir: o.dir ?? "down", homeDir: o.dir ?? "down", nextTurn: 2 + Math.random() * 4, alert: 0 }));
+    this.save.map = p.map;
+    this.save.x = p.x;
+    this.save.y = p.y;
+    this.save.dir = p.dir;
+  }
+
+  /** Objects that are still in the world (picked-up cards and reagents are gone). */
+  objects(): WorldObject[] {
+    return this.map.data.objects.filter((o) => {
+      if ((o.kind === "card" || o.kind === "reagent") && this.save.flags[`got:${this.mapId}:${o.id}`]) return false;
+      if (o.kind === "gate" && this.save.flags[`open:${o.id}`]) return false;
+      return o.kind !== "npc";
+    });
+  }
+
+  tile(x: number, y: number): string | undefined {
+    const d = this.map.data;
+    return x >= 0 && y >= 0 && x < d.w && y < d.h ? d.tiles[y][x] : undefined;
+  }
+
+  blocked(x: number, y: number): boolean {
+    const t = this.tile(x, y);
+    if (t === undefined || !WALKABLE.has(t)) return true;
+    if (this.actors.some((a) => a.x === x && a.y === y)) return true;
+    return this.objects().some((o) => o.x === x && o.y === y && (SOLID_OBJECTS.has(o.kind) || ((o.kind === "card" || o.kind === "reagent") && !o.hidden)));
+  }
+
+  facing(): [number, number] {
+    const [dx, dy] = DX[this.dir];
+    return [this.px + dx, this.py + dy];
+  }
+
+  region(): { id: string; name: string } | null {
+    if (this.mapId !== "overworld") return { id: this.mapId, name: this.map.data.name };
+    for (const [id, r] of Object.entries(WORLD.regions)) {
+      const [x0, y0, x1, y1] = r.rect;
+      if (this.px >= x0 && this.px < x1 && this.py >= y0 && this.py < y1) return { id, name: r.name };
+    }
+    return null;
+  }
+
+  /** Press the action button: whatever is in front of you. */
+  interact(): WorldEvent | null {
+    if (this.moving || this.approaching) return null;
+    const [fx, fy] = this.facing();
+    const actor = this.actors.find((a) => a.x === fx && a.y === fy);
+    if (actor) {
+      actor.dir = OPPOSITE[this.dir];
+      return { type: "interact", obj: actor.obj };
+    }
+    // Reach over a shop counter.
+    if (this.tile(fx, fy) === "K") {
+      const [dx, dy] = DX[this.dir];
+      const over = this.actors.find((a) => a.x === fx + dx && a.y === fy + dy);
+      if (over) {
+        over.dir = OPPOSITE[this.dir];
+        return { type: "interact", obj: over.obj };
+      }
+    }
+    const obj = this.objects().find((o) => o.x === fx && o.y === fy && o.kind !== "warp");
+    if (obj) return { type: obj.kind === "card" || obj.kind === "reagent" ? "found" : "interact", obj };
+    return null;
+  }
+
+  private sightCheck(): Actor | null {
+    for (const a of this.actors) {
+      const p = PEOPLE[a.id];
+      const sight = a.obj.sight ?? 0;
+      if (!p.duel || sight <= 0 || this.save.flags[`beat:${a.id}`]) continue;
+      const [dx, dy] = DX[a.dir];
+      for (let i = 1; i <= sight; i++) {
+        const x = a.x + dx * i;
+        const y = a.y + dy * i;
+        if (x === this.px && y === this.py) return a;
+        const t = this.tile(x, y);
+        if (t === undefined || !WALKABLE.has(t) || this.actors.some((o) => o.x === x && o.y === y)) break;
+        if (this.objects().some((o) => o.x === x && o.y === y && SOLID_OBJECTS.has(o.kind))) break;
+      }
+    }
+    return null;
+  }
+
+  /** Advance the world. Returns something that happened, if anything did. */
+  update(dt: number, input: Input, paused: boolean): WorldEvent | null {
+    this.time += dt;
+    this.bump = Math.max(0, this.bump - dt);
+    if (this.approaching) {
+      const ap = this.approaching;
+      const a = ap.actor;
+      const [dx, dy] = DX[a.dir];
+      if (a.alert > 0) {
+        a.alert -= dt;
+        return null;
+      }
+      const dist = Math.abs(a.x - this.px) + Math.abs(a.y - this.py);
+      if (dist <= 1) {
+        a.fx = a.fy = 0;
+        this.dir = OPPOSITE[a.dir];
+        this.approaching = null;
+        ap.done();
+        return null;
+      }
+      ap.path += dt * 5;
+      if (ap.path >= 1) {
+        ap.path = 0;
+        a.x += dx;
+        a.y += dy;
+        a.fx = a.fy = 0;
+      } else {
+        a.fx = dx * ap.path * TILE;
+        a.fy = dy * ap.path * TILE;
+      }
+      return null;
+    }
+    if (paused) return null;
+    // People glance around now and then.
+    for (const a of this.actors) {
+      a.nextTurn -= dt;
+      if (a.nextTurn <= 0) {
+        const p = PEOPLE[a.id];
+        const boss = p.duel && p.duel.rank !== "duelist";
+        a.nextTurn = 2.5 + Math.random() * 4;
+        if (!boss) {
+          const dirs: Dir[] = ["up", "down", "left", "right"];
+          a.dir = a.dir !== a.homeDir || Math.random() < 0.5 ? a.homeDir : dirs[Math.floor(Math.random() * 4)];
+        }
+      }
+    }
+    if (this.moving) {
+      const speed = input.run ? 9 : 5;
+      this.progress += dt * speed;
+      if (this.progress >= 1) {
+        const [dx, dy] = DX[this.moving];
+        this.px += dx;
+        this.py += dy;
+        this.progress = 0;
+        this.moving = null;
+        this.stepCount++;
+        this.save.x = this.px;
+        this.save.y = this.py;
+        this.save.dir = this.dir;
+        return this.arrived();
+      }
+      return null;
+    }
+    // Someone may have turned to face you while you stood still.
+    const seen = this.sightCheck();
+    if (seen) return { type: "challenge", npc: seen };
+    const want = input.held[input.held.length - 1];
+    if (!want) {
+      this.turnDelay = 0;
+      return null;
+    }
+    if (want !== this.dir && this.turnDelay <= 0 && !this.wasWalking) {
+      this.dir = want;
+      this.turnDelay = 0.09;
+      return null;
+    }
+    this.turnDelay -= dt;
+    if (this.turnDelay > 0) return null;
+    this.dir = want;
+    const [dx, dy] = DX[want];
+    if (this.blocked(this.px + dx, this.py + dy)) {
+      this.bump = 0.2;
+      this.wasWalking = false;
+      return null;
+    }
+    this.moving = want;
+    this.wasWalking = true;
+    return null;
+  }
+  private wasWalking = false;
+
+  private arrived(): WorldEvent | null {
+    const here = this.objects();
+    const warp = here.find((o) => o.kind === "warp" && o.x === this.px && o.y === this.py);
+    if (warp) return { type: "warp", obj: warp };
+    const hidden = here.find((o) => (o.kind === "card" || o.kind === "reagent") && o.hidden && o.x === this.px && o.y === this.py);
+    if (hidden) return { type: "found", obj: hidden };
+    const r = this.region();
+    if (r && r.id !== this.lastRegion) {
+      this.lastRegion = r.id;
+      return { type: "region", ...r };
+    }
+    const seen = this.sightCheck();
+    if (seen) return { type: "challenge", npc: seen };
+    return null;
+  }
+
+  /** The challenger shouts, then walks up to you. */
+  startApproach(actor: Actor, done: () => void) {
+    actor.alert = 0.7;
+    // Face the player along the line they were seen on.
+    if (actor.x === this.px) actor.dir = this.py > actor.y ? "down" : "up";
+    else actor.dir = this.px > actor.x ? "right" : "left";
+    this.approaching = { actor, path: 0, done };
+    this.moving = null;
+  }
+
+  // ---------------------------------------------------------------- drawing
+
+  draw(c: CanvasRenderingContext2D, w: number, h: number, scale: number) {
+    const d = this.map.data;
+    const inside = INSIDE_THEMES.has(d.theme);
+    const [mdx, mdy] = this.moving ? DX[this.moving] : [0, 0];
+    const ppx = (this.px + mdx * this.progress) * TILE;
+    const ppy = (this.py + mdy * this.progress) * TILE;
+    const vw = w / scale;
+    const vh = h / scale;
+    let camX = ppx + TILE / 2 - vw / 2;
+    let camY = ppy + TILE / 2 - vh / 2;
+    const mw = d.w * TILE;
+    const mh = d.h * TILE;
+    camX = mw <= vw ? (mw - vw) / 2 : Math.max(0, Math.min(mw - vw, camX));
+    camY = mh <= vh ? (mh - vh) / 2 : Math.max(0, Math.min(mh - vh, camY));
+    camX = Math.round(camX * scale) / scale;
+    camY = Math.round(camY * scale) / scale;
+
+    c.save();
+    c.imageSmoothingEnabled = false;
+    c.fillStyle = d.theme === "vale" ? "#2d5a27" : "#08060b";
+    c.fillRect(0, 0, w, h);
+    c.scale(scale, scale);
+    c.translate(-camX, -camY);
+    c.drawImage(this.map.canvas, 0, 0);
+
+    const x0 = Math.floor(camX / TILE) - 1;
+    const y0 = Math.floor(camY / TILE) - 1;
+    const x1 = Math.ceil((camX + vw) / TILE) + 1;
+    const y1 = Math.ceil((camY + vh) / TILE) + 1;
+    const frame = Math.floor(this.time * 3) % 4;
+    for (const [x, y] of this.map.animated) {
+      if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+      const variant = hashString(`${x},${y}`) % 4;
+      c.drawImage(tileCanvas(d.tiles[y][x], d.theme, variant, frame, this.map.masks[y][x], this.map.under[y][x], inside), x * TILE, y * TILE);
+    }
+
+    // Things and people, back to front.
+    type Drawable = { y: number; draw: () => void };
+    const list: Drawable[] = [];
+    const lit = this.save.sigils.length;
+    for (const o of this.objects()) {
+      if (o.kind === "warp") continue;
+      if (o.x < x0 || o.x > x1 || o.y < y0 || o.y > y1) continue;
+      const ox = o.x * TILE;
+      const oy = o.y * TILE;
+      if ((o.kind === "card" || o.kind === "reagent") && o.hidden) {
+        list.push({ y: oy, draw: () => paintObject(c, "glint", ox, oy, this.time) });
+        continue;
+      }
+      const color = o.kind === "reagent" && o.id ? REAGENTS[o.id]?.color : o.kind === "waystone" && o.id === this.save.stone ? "#ffd25a" : undefined;
+      list.push({ y: oy, draw: () => paintObject(c, o.kind, ox, oy, this.time, { color, chest: o.chest, lit, theme: d.theme }) });
+    }
+    for (const a of this.actors) {
+      if (a.x < x0 || a.x > x1 || a.y < y0 || a.y > y1) continue;
+      const p = PEOPLE[a.id];
+      const ax = a.x * TILE + a.fx;
+      const ay = a.y * TILE + a.fy;
+      const walking = this.approaching?.actor === a && a.alert <= 0;
+      list.push({
+        y: ay,
+        draw: () => {
+          if (p.look.aura) {
+            c.globalAlpha = 0.25 + 0.15 * Math.sin(this.time * 3);
+            c.fillStyle = p.look.aura;
+            c.beginPath();
+            c.ellipse(ax + 8, ay + 9, 10, 9, 0, 0, Math.PI * 2);
+            c.fill();
+            c.globalAlpha = 1;
+          }
+          c.fillStyle = "#00000033";
+          c.fillRect(ax + 4, ay + 14, 8, 2);
+          c.drawImage(personSprite(p.look, a.dir, walking ? Math.floor(this.time * 8) % 2 : 0), ax, ay - 1);
+          if (a.alert > 0) {
+            // "!" over their head.
+            c.fillStyle = "#ffffff";
+            c.fillRect(ax + 5, ay - 12, 6, 10);
+            c.fillStyle = "#e2553a";
+            c.fillRect(ax + 7, ay - 11, 2, 5);
+            c.fillRect(ax + 7, ay - 5, 2, 2);
+          }
+          if (p.duel && this.save.flags[`beat:${a.id}`] && p.duel.rank === "duelist") return;
+        },
+      });
+    }
+    const look = this.playerLook();
+    const pf = this.moving ? (this.progress < 0.5 ? 1 : 0) * ((this.stepCount % 2) + 1) : 0;
+    list.push({
+      y: ppy,
+      draw: () => {
+        c.fillStyle = "#00000033";
+        c.fillRect(ppx + 4, ppy + 14, 8, 2);
+        c.drawImage(personSprite(look, this.dir, pf ? 1 : 0), ppx, ppy - 1 - (pf ? 1 : 0));
+      },
+    });
+    list.sort((a, b) => a.y - b.y);
+    for (const it of list) it.draw();
+    c.restore();
+  }
+
+  playerLook() {
+    return { skin: "#f0c8a0", hair: "#5a3a22", cloth: "#d9573b", accent: "#f5e6a8", extra: "cap" as const, extraColor: "#2e6fb7" };
+  }
+}
+
+export function sigilColor(id: string) {
+  return SIGILS[id]?.color ?? "#ffffff";
+}

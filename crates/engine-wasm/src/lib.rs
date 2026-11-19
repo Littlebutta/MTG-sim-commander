@@ -35,6 +35,18 @@ impl WasmSession {
         })
     }
 
+    /// An adventure duel: no commanders, and everyone starts at 20 life unless their seat
+    /// says otherwise.
+    pub fn adventure(seed: u64, seats_json: &str) -> Result<WasmSession, JsValue> {
+        let seats: Vec<SeatSpec> = serde_json::from_str(seats_json).map_err(js_err)?;
+        if seats.len() < 2 {
+            return Err(js_err("a duel needs two players"));
+        }
+        Ok(WasmSession {
+            inner: Session::new_game_with(seed, seats, client_api::adventure::STARTING_LIFE),
+        })
+    }
+
     /// JSON `PlayerView` for player 0 (the local player).
     pub fn view(&self) -> String {
         serde_json::to_string(&self.inner.view(PlayerId(0))).unwrap()
@@ -140,4 +152,21 @@ pub fn lookup_cards(names_json: &str) -> Result<String, JsValue> {
     let cards = starter_cards();
     let index = carddb::CardIndex::new(&cards);
     Ok(serde_json::to_string(&client_api::builder::lookup(&index, &names)).unwrap())
+}
+
+/// Check an adventure decklist against the built-in card pool.
+#[wasm_bindgen]
+pub fn check_adventure_deck(text: &str) -> String {
+    let cards = starter_cards();
+    let index = carddb::CardIndex::new(&cards);
+    serde_json::to_string(&client_api::adventure::check_adventure_deck(text, &index)).unwrap()
+}
+
+/// Resolve an adventure decklist against the built-in card pool into JSON `ResolvedDeck`.
+#[wasm_bindgen]
+pub fn resolve_adventure_deck(name: &str, text: &str) -> Result<String, JsValue> {
+    let cards = starter_cards();
+    let index = carddb::CardIndex::new(&cards);
+    let deck = client_api::adventure::resolve_adventure_deck(name, text, &index).map_err(js_err)?;
+    Ok(serde_json::to_string(&deck).unwrap())
 }

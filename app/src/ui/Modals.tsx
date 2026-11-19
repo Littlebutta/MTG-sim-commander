@@ -254,7 +254,7 @@ export function CommanderModal({ view, act }: { view: PlayerView; act: Act }) {
   );
 }
 
-export function GameOverModal({ view, onExit }: { view: PlayerView; onExit: () => void }) {
+export function GameOverModal({ view, onExit, label }: { view: PlayerView; onExit: () => void; label?: string }) {
   const d = view.decision as { GameOver: { winner: number | null } };
   const w = d.GameOver.winner;
   const won = w === view.you;
@@ -264,7 +264,7 @@ export function GameOverModal({ view, onExit }: { view: PlayerView; onExit: () =
         <h2 className={won ? "win" : ""}>{won ? "Victory" : w === null ? "Draw" : `${view.players[w].name} wins`}</h2>
         <p className="muted">Turn {view.turn}</p>
         <div className="modal-actions">
-          <button className="btn btn-primary" onClick={onExit}>Back to menu</button>
+          <button className="btn btn-primary" onClick={onExit}>{label ?? "Back to menu"}</button>
         </div>
       </div>
     </div>

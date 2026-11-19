@@ -1,0 +1,69 @@
+{
+ "starters": {
+  "white": {
+   "name": "Dawnguard",
+   "text": "4 Savannah Lions\n3 Glory Seeker\n3 Youthful Knight\n2 Venerable Monk\n3 Wild Griffin\n2 Pillarfield Ox\n1 Serra Angel\n2 Raise the Alarm\n2 Charge\n1 Sunlance\n17 Plains"
+  },
+  "blue": {
+   "name": "Tidecaller",
+   "text": "3 Merfolk of the Pearl Trident\n3 Coral Merfolk\n3 Wind Drake\n2 Horned Turtle\n2 Snapping Drake\n2 Azure Drake\n1 Air Elemental\n2 Unsummon\n2 Essence Scatter\n2 Divination\n1 Counterspell\n17 Island"
+  },
+  "black": {
+   "name": "Gravecaller",
+   "text": "3 Typhoid Rats\n3 Walking Corpse\n3 Scathe Zombies\n2 Dusk Imp\n2 Giant Cockroach\n2 Gravedigger\n1 Zombie Goliath\n2 Disfigure\n2 Vicious Hunger\n2 Raise Dead\n1 Hand of Death\n17 Swamp"
+  },
+  "red": {
+   "name": "Emberheart",
+   "text": "4 Raging Goblin\n3 Goblin Bully\n3 Gray Ogre\n2 Raging Cougar\n2 Hill Giant\n2 Canyon Minotaur\n1 Fire Elemental\n3 Shock\n2 Volcanic Hammer\n1 Brute Force\n17 Mountain"
+  },
+  "green": {
+   "name": "Wildheart",
+   "text": "3 Llanowar Elves\n4 Grizzly Bears\n3 Centaur Courser\n2 Giant Spider\n2 Ironroot Treefolk\n2 Spined Wurm\n1 Craw Wurm\n3 Giant Growth\n2 Titanic Growth\n1 Harmonize\n17 Forest"
+  },
+  "colorless": {
+   "name": "Clockwork",
+   "text": "4 Field Creeper\n3 Bronze Sable\n3 Yotian Soldier\n2 Steel Wall\n2 Guardian Automaton\n2 Palladium Myr\n2 Skyscanner\n1 Phyrexian Hulk\n1 Razorfield Thresher\n2 Mind Stone\n1 Rod of Ruin\n17 Wastes"
+  }
+ },
+ "duelists": {
+  "pip": "4 Grizzly Bears\n3 Savannah Lions\n3 Watchwolf\n3 Glory Seeker\n2 Runeclaw Bear\n2 Silvercoat Lion\n2 Steward of Valeron\n2 Pillarfield Ox\n2 Giant Growth\n9 Plains\n8 Forest",
+  "rowan": "4 Tundra Wolves\n4 Youthful Knight\n3 Attended Knight\n2 Benalish Knight\n2 Knight of Meadowgrain\n2 Standing Troops\n2 Ekundu Griffin\n2 Sure Strike\n2 Mighty Leap\n16 Plains\n1 Mountain",
+  "nell": "4 Merfolk of the Pearl Trident\n4 Coral Merfolk\n3 Vodalian Soldiers\n3 Watercourser\n2 Scroll Thief\n2 Giant Octopus\n2 Kraken Hatchling\n2 Unsummon\n1 Divination\n17 Island",
+  "tam": "4 Mons's Goblin Raiders\n4 Goblin Bully\n3 Goblin Instigator\n3 Raging Goblin\n2 Goblin Roughrider\n2 Krenko's Command\n2 Dragon Fodder\n2 Shock\n18 Mountain",
+  "ida": "4 Llanowar Elves\n3 Elvish Warrior\n3 Nessian Courser\n2 Trained Armodon\n2 Rumbling Baloth\n3 Giant Growth\n2 Titanic Growth\n2 Monstrous Growth\n1 Overrun\n18 Forest",
+  "mosswick": "4 Typhoid Rats\n4 Muck Rats\n3 Vampire of the Dire Moon\n2 Vampire Champion\n2 Feral Abomination\n2 Gifted Aetherborn\n3 Disfigure\n2 Last Gasp\n1 Murder\n17 Swamp",
+  "vey": "4 Child of Night\n3 Vampire Spawn\n2 Bloodhunter Bat\n2 Vampire Sovereign\n2 Vampire Neonate\n2 Gifted Aetherborn\n3 Sovereign's Bite\n2 Douse in Gloom\n2 Vicious Hunger\n18 Swamp",
+  "gil": "4 Walking Corpse\n4 Scathe Zombies\n3 Shambling Goblin\n2 Zombie Goliath\n2 Gravedigger\n2 Cadaver Imp\n3 Raise Dead\n2 Zombify\n1 Disentomb\n17 Swamp",
+  "morrow": "4 Deathbloom Thallid\n3 Sprout\n3 Jade Mage\n2 Deadly Recluse\n2 Thornweald Archer\n2 Giant Spider\n3 Putrefy\n2 Disfigure\n1 Harmonize\n1 Murder\n6 Swamp\n11 Forest",
+  "hob": "4 Dusk Legion Zealot\n3 Phyrexian Rager\n3 Gravedigger\n2 Tithebearer Giant\n2 Skeleton Archer\n2 Bog Imp\n2 Night's Whisper\n2 Raise Dead\n2 Hand of Death\n1 Ambition's Cost\n17 Swamp",
+  "edda": "4 Elite Vanguard\n3 Raise the Alarm\n3 Attended Knight\n2 Benalish Marshal\n2 Glorious Anthem\n2 Midnight Haunting\n3 Charge\n2 Inspired Charge\n2 Warrior's Honor\n17 Plains",
+  "calix": "4 Soul Warden\n3 Lone Missionary\n3 Venerable Monk\n2 Nyx-Fleece Ram\n2 Tireless Missionaries\n2 Angel of Mercy\n2 Seraph of Dawn\n2 Revitalize\n2 Dawnstrike Paladin\n18 Plains",
+  "lune": "4 Suntail Hawk\n3 Healer's Hawk\n3 Wild Griffin\n3 Aven Sentry\n2 Griffin Sentinel\n2 Shining Aerosaur\n2 Serra Angel\n2 Mighty Leap\n2 Sunlance\n17 Plains",
+  "osric": "4 Gideon's Lawkeeper\n3 Benalish Trapper\n3 Angelic Wall\n2 Wall of Omens\n2 Standing Troops\n2 Ardent Militia\n2 Yotian Soldier\n2 Serra Angel\n2 Day of Judgment\n18 Plains",
+  "maelis": "4 Boros Swiftblade\n3 Skyknight Legionnaire\n3 Youthful Knight\n2 Ajani's Sunstriker\n2 Anaba Bodyguard\n3 Lightning Helix\n2 Lightning Bolt\n2 Sure Strike\n1 Uncaged Fury\n9 Plains\n9 Mountain",
+  "brakka": "4 Raging Cougar\n3 Vulshok Berserker\n3 Lightning Elemental\n2 Charging Monstrosaur\n2 Cobblebrute\n2 Borderland Minotaur\n2 Kamahl, Pit Fighter\n2 Brute Strength\n2 Infuriate\n1 Fervor\n17 Mountain",
+  "fizz": "4 Guttersnipe\n3 Kiln Fiend\n2 Prodigal Pyromancer\n4 Shock\n3 Lightning Strike\n2 Searing Spear\n2 Volcanic Hammer\n2 Lightning Blast\n1 Ember Shot\n17 Mountain",
+  "snag": "4 Goblin Instigator\n3 Beetleback Chief\n3 Mogg Fanatic\n2 Ember Hauler\n2 Goblin Fireslinger\n3 Krenko's Command\n2 Hordeling Outburst\n2 Dragon Fodder\n2 Fervor\n17 Mountain",
+  "sora": "4 Furnace Whelp\n3 Volcanic Dragon\n2 Shivan Dragon\n2 Fire Imp\n3 Sparkmage Apprentice\n2 Flametongue Kavu\n2 Lightning Strike\n3 Shock\n2 Flame Slash\n17 Mountain",
+  "kessa": "4 Rip-Clan Crasher\n3 Garruk's Companion\n3 Raging Goblin\n2 Fires of Yavimaya\n2 Charging Monstrosaur\n2 Rumbling Baloth\n2 Kalonian Tusker\n2 Brute Force\n2 Giant Growth\n1 Overrun\n6 Mountain\n11 Forest",
+  "quill": "4 Storm Crow\n3 Zephyr Sprite\n3 Wind Drake\n3 Cloudkin Seer\n2 Snapping Drake\n2 Mist Raven\n2 Air Elemental\n2 Unsummon\n2 Remove Soul\n17 Island",
+  "ambrose": "3 Tolarian Scholar\n3 Lumengrid Warden\n2 Wall of Air\n2 Mahamoti Djinn\n3 Counterspell\n2 Cancel\n2 Negate\n2 Exclude\n2 Concentrate\n2 Jace's Ingenuity\n1 Opportunity\n16 Island",
+  "brine": "4 Spectral Sailor\n3 Man-o'-War\n3 Scroll Thief\n2 Thieving Magpie\n2 Aven Fisher\n2 Mist Raven\n3 Unsummon\n2 Repulse\n2 Boomerang\n17 Island",
+  "sela": "4 Kraken Hatchling\n3 Fortress Crab\n3 Horned Turtle\n2 Wall of Air\n4 Tome Scour\n3 Mind Sculpt\n2 Millstone\n2 Essence Scatter\n1 Counterspell\n16 Island",
+  "ivo": "4 Wee Dragonauts\n3 Kiln Fiend\n2 Prodigal Sorcerer\n3 Shock\n3 Lightning Strike\n2 Unsummon\n2 Divination\n2 Negate\n2 Repulse\n1 Inspiration\n9 Island\n7 Mountain",
+  "thorne": "4 Thornweald Archer\n4 Deadly Recluse\n3 Giant Spider\n3 Mammoth Spider\n2 Sentinel Spider\n2 Plummet\n2 Giant Growth\n2 Titanic Growth\n1 Harmonize\n17 Forest",
+  "bramblebeard": "4 Llanowar Elves\n3 Elvish Mystic\n2 Vine Trellis\n2 Leatherback Baloth\n2 Craw Wurm\n2 Vastwood Gorger\n2 Colossal Dreadmaw\n2 Enormous Baloth\n2 Pelakka Wurm\n2 Harmonize\n1 Overrun\n16 Forest",
+  "fenna": "4 Jade Mage\n4 Sprout\n3 Deathbloom Thallid\n3 Llanowar Visionary\n2 Wall of Wood\n2 Overrun\n2 Glorious Anthem\n2 Elvish Visionary\n2 Woodland Mystic\n2 Plains\n1 Swamp\n13 Forest",
+  "kip": "4 Kalonian Tusker\n3 Trained Armodon\n3 Thrashing Brontodon\n2 Woodland Mystic\n2 Fyndhorn Elves\n2 Ancient Brontodon\n1 Gigantosaurus\n2 Charging Monstrosaur\n2 Titanic Growth\n2 Monstrous Growth\n1 Mountain\n16 Forest",
+  "oakhart": "4 Watchwolf\n4 Steward of Valeron\n3 Avacyn's Pilgrim\n2 Rhox War Monk\n2 Knight of Meadowgrain\n2 Serra Angel\n2 Glorious Anthem\n2 Giant Growth\n2 Inspired Charge\n10 Plains\n1 Island\n6 Forest",
+  "gearlock": "4 Copper Myr\n3 Iron Myr\n3 Alloy Myr\n2 Palladium Myr\n2 Perilous Myr\n2 Darksteel Myr\n2 Filigree Familiar\n2 Gold-Forged Sentinel\n2 Hexplate Golem\n2 Moonglove Extract\n16 Wastes",
+  "sentinel": "4 Steel Wall\n3 Wall of Spears\n3 Yotian Soldier\n2 Guardian Automaton\n2 Pierce Strider\n2 Prizefighter Construct\n2 Ornithopter of Paradise\n2 Hedron Archive\n2 Rod of Ruin\n2 Phyrexian Hulk\n16 Wastes",
+  "vesper": "4 Vampire Nighthawk\n3 Gifted Aetherborn\n3 Vampire Sovereign\n2 Bloodhunter Bat\n2 Ravenous Chupacabra\n2 Phyrexian Gargantua\n2 Doom Blade\n2 Murder\n2 Grasp of Darkness\n2 Soul Feast\n1 Drown in Sorrow\n15 Swamp",
+  "aurelia": "4 Healer's Hawk\n3 Seraph of Dawn\n3 Serra Angel\n2 Shepherd of the Lost\n2 Archangel\n1 Zetalpa, Primal Dawn\n2 Angel of Mercy\n2 Inspiring Overseer\n2 Mighty Leap\n2 Sunlance\n1 Wrath of God\n16 Plains",
+  "pyrrhus": "4 Furnace Whelp\n3 Volcanic Dragon\n2 Shivan Dragon\n2 Shivan Hellkite\n2 Flametongue Kavu\n4 Lightning Bolt\n3 Lightning Strike\n2 Flame Slash\n1 Pyroclasm\n17 Mountain",
+  "oshara": "3 Spectral Sailor\n3 Cloudkin Seer\n2 Mist Raven\n2 Benthic Giant\n2 Mahamoti Djinn\n4 Counterspell\n2 Exclude\n2 Essence Scatter\n2 Repulse\n1 Jace's Ingenuity\n1 Opportunity\n16 Island",
+  "thornfather": "4 Llanowar Elves\n3 Birds of Paradise\n2 Sentinel Spider\n2 Leatherback Baloth\n2 Pelakka Wurm\n2 Ancient Brontodon\n1 Gigantosaurus\n2 Kavu Climber\n2 Titanic Growth\n2 Overrun\n1 Harmonize\n17 Forest",
+  "regent": "1 Sol Ring\n2 Mind Stone\n2 Baleful Strix\n2 Tower Gargoyle\n2 Gold-Forged Sentinel\n2 Hexplate Golem\n2 Wall of Omens\n2 Vampire Nighthawk\n2 Absorb\n2 Vindicate\n2 Counterspell\n1 Wrath of God\n1 Murder\n1 Serra Angel\n6 Plains\n5 Island\n5 Swamp",
+  "morvane": "2 Birds of Paradise\n2 Alloy Myr\n2 Broodmate Dragon\n2 Lightning Angel\n1 Zetalpa, Primal Dawn\n2 Woolly Thoctar\n2 Rhox War Monk\n2 Vampire Nighthawk\n2 Shivan Hellkite\n2 Lightning Helix\n2 Terminate\n2 Putrefy\n1 Vindicate\n4 Plains\n1 Island\n4 Swamp\n4 Mountain\n3 Forest"
+ }
+}
