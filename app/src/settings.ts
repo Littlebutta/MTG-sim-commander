@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { inTauri } from "./decks";
+import { configureSound } from "./sound";
 
 export const THEMES = [
   { id: "classic", name: "Night Table", hint: "Dark violet felt" },
@@ -27,9 +28,12 @@ export interface Settings {
   back: BackId;
   /** Data URL of the player's own card-back image. */
   customBack: string | null;
+  sound: boolean;
+  /** 0 to 1. */
+  volume: number;
 }
 
-const DEFAULTS: Settings = { theme: "classic", back: "sigil", customBack: null };
+const DEFAULTS: Settings = { theme: "classic", back: "sigil", customBack: null, sound: true, volume: 0.6 };
 const LS = "commander-table.settings";
 
 let current: Settings = DEFAULTS;
@@ -48,12 +52,14 @@ export async function loadSettings(): Promise<Settings> {
   } catch {
     current = DEFAULTS;
   }
+  configureSound(current.sound, current.volume);
   listeners.forEach((l) => l(current));
   return current;
 }
 
 export async function saveSettings(patch: Partial<Settings>) {
   current = { ...current, ...patch };
+  configureSound(current.sound, current.volume);
   listeners.forEach((l) => l(current));
   try {
     if (inTauri()) {

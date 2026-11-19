@@ -5,6 +5,7 @@ import { appVersion, checkForUpdate, type UpdateState } from "./updater";
 import { DeckScreen } from "./ui/DeckScreen";
 import { BuilderScreen } from "./ui/BuilderScreen";
 import { loadSettings } from "./settings";
+import { play, unlockSound } from "./sound";
 import { SettingsScreen } from "./ui/SettingsScreen";
 import { SetupScreen } from "./ui/SetupScreen";
 import { Table } from "./ui/Table";
@@ -34,6 +35,21 @@ export function App() {
   const [update, setUpdate] = useState<UpdateState>({ kind: "checking" });
   const [version, setVersion] = useState<string | null>(null);
   const [cards, setCards] = useState<CardStatus | null>(null);
+
+  // Sound starts with the first click (browsers require it), and buttons get a soft click.
+  useEffect(() => {
+    const onDown = () => unlockSound();
+    const onClick = (e: MouseEvent) => {
+      const el = (e.target as Element | null)?.closest?.("button, label.toggle, .theme-tile, .back-tile");
+      if (el && !(el as HTMLButtonElement).disabled) play("click");
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("click", onClick, true);
+    };
+  }, []);
 
   useEffect(() => {
     checkForUpdate(setUpdate).then(setUpdate);

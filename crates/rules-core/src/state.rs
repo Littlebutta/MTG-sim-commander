@@ -62,6 +62,10 @@ pub struct Player {
     pub commander_damage: HashMap<CardId, i32>,
     /// Standing answer to the "may put it into the command zone" choices of CR 903.9a/b.
     pub return_commander_to_command_zone: bool,
+    /// Ask each time a commander reaches a graveyard or exile instead of using the standing
+    /// answer (CR 903.9a).
+    #[serde(default)]
+    pub ask_commander_zone: bool,
     pub drew_from_empty_library: bool,
     pub has_lost: bool,
     pub has_left: bool,
