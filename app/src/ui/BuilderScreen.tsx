@@ -100,9 +100,10 @@ function CardTip({ card }: { card: CardSummary }) {
   const y = mouse.y / z;
   const W = 300;
   const left = x > vw / 2 ? Math.max(8, x - W - 36) : Math.min(vw - W - 8, x + 36);
-  const top = Math.max(8, Math.min(vh - 280, y - 60));
+  const top = Math.max(8, Math.min(vh - 500, y - 60));
   return (
     <div className="b-tip" style={{ left, top, right: "auto", bottom: "auto" }}>
+      <div className="b-tip-art"><CardArt card={asView(card)} glyph={56} /></div>
       <div className="b-tip-head"><strong>{card.name}</strong><ManaCost cost={card.mana_cost} /></div>
       <div className="b-tip-type">{card.type_line}</div>
       <div className="b-tip-text">{card.oracle_text || <span className="muted">No rules text.</span>}</div>
