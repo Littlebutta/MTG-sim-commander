@@ -174,7 +174,8 @@ fn kills_the_biggest_threat_at_end_of_turn() {
         Action::Cast {
             card: bolt,
             targets: vec![Target::Object(drake)],
-            x: 0
+            x: 0,
+            mode: None,
         }
     );
 }

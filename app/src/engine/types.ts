@@ -35,7 +35,7 @@ export type Action =
   | "Concede"
   | { Keep: { bottom: number[] } }
   | { PlayLand: number }
-  | { Cast: { card: number; targets: Target[]; x: number } }
+  | { Cast: { card: number; targets: Target[]; x: number; mode?: number | null } }
   | { Activate: { object: number; ability: number; targets: Target[]; x: number } }
   | { ActivateMana: { object: number; ability: number; color: string | null } }
   | { OrderTriggers: [number, Target[]][] }
@@ -85,6 +85,8 @@ export interface CardView {
   blocking: number | null;
   abilities: AbilityView[];
   spell_targets: string[];
+  /** Modal spells: each mode's text and target descriptions. */
+  spell_modes?: [string, string[]][];
   has_x: boolean;
   unsupported: boolean;
   zone: string;
@@ -136,6 +138,8 @@ export interface Hints {
   /** For each of your possible blockers, the attackers it may block. */
   block_options?: [number, number[]][];
   cast_targets: Record<string, Target[][]>;
+  /** Modal spells: target choices per castable mode, keyed "card:mode". */
+  mode_targets?: Record<string, Target[][]>;
   ability_targets: Record<string, Target[][]>;
   triggers: TriggerChoiceView[];
   discard_count: number;

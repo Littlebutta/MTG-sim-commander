@@ -65,11 +65,14 @@ impl Game {
                 if !instant && !self.sorcery_timing_ok(p) {
                     return false;
                 }
-                if o.def
-                    .spell_targets
-                    .iter()
-                    .any(|s| self.legal_targets(p, Some(*id), s).is_empty())
-                {
+                // At least one mode (or the spell itself) has legal targets for every slot.
+                if !o.def.mode_choices().into_iter().any(|m| {
+                    o.def.spell_parts(m).is_some_and(|(specs, _)| {
+                        specs
+                            .iter()
+                            .all(|s| !self.legal_targets(p, Some(*id), s).is_empty())
+                    })
+                }) {
                     return false;
                 }
                 let tax = if o.zone == Zone::Command {
@@ -89,9 +92,15 @@ impl Game {
         }
         let view = self.view();
         let mut out = Vec::new();
-        for id in &self.battlefield {
+        let hand = self.player(p).hand.clone();
+        for (id, in_hand) in self
+            .battlefield
+            .iter()
+            .map(|id| (id, false))
+            .chain(hand.iter().map(|id| (id, true)))
+        {
             let Some(ch) = view.get(*id) else { continue };
-            if ch.controller != p {
+            if ch.controller != p && !in_hand {
                 continue;
             }
             let o = &self.objects[id];
@@ -106,6 +115,9 @@ impl Game {
                     } => (cost, *sorcery_speed, targets.as_slice()),
                     _ => continue,
                 };
+                if cost.discard_this != in_hand {
+                    continue;
+                }
                 if cost.tap
                     && (o.tapped
                         || (ch.is_creature()
@@ -116,6 +128,22 @@ impl Game {
                 }
                 if (sorcery || cost.loyalty.is_some()) && !self.sorcery_timing_ok(p) {
                     continue;
+                }
+                if cost.once_per_turn && o.activated_this_turn.contains(&i) {
+                    continue;
+                }
+                if self.player(p).hand.len() < cost.discard as usize {
+                    continue;
+                }
+                if let Some((f, n)) = &cost.sacrifice {
+                    if self.cost_sacrifice_choice(p, *id, f, *n).len() < *n as usize {
+                        continue;
+                    }
+                }
+                if let Some((k, n)) = &cost.remove_counters {
+                    if o.counters.get(k).copied().unwrap_or(0) < *n {
+                        continue;
+                    }
                 }
                 if let Some(l) = cost.loyalty {
                     let have = o.counters.get(&CounterKind::Loyalty).copied().unwrap_or(0) as i32;

@@ -324,6 +324,8 @@ impl Game {
                 is_token,
                 new_in_zone: matches!(zone, Zone::Graveyard | Zone::Exile),
                 loyalty_used: false,
+                regen_shields: 0,
+                activated_this_turn: Vec::new(),
             },
         );
         self.zone_list_mut(zone, owner).push(id);
@@ -457,6 +459,11 @@ impl Game {
         for a in &def.abilities {
             match a {
                 Ability::EntersTapped => self.objects.get_mut(&id).unwrap().tapped = true,
+                Ability::EntersTappedUnless(c) => {
+                    if !self.entry_condition_met(id, c) {
+                        self.objects.get_mut(&id).unwrap().tapped = true;
+                    }
+                }
                 Ability::EntersWithCounters {
                     kind,
                     amount: Amount::Fixed(n),
@@ -468,6 +475,44 @@ impl Game {
             if let Some(l) = def.loyalty.filter(|l| *l > 0) {
                 self.add_counters(id, CounterKind::Loyalty, l as u32);
             }
+        }
+    }
+
+    fn entry_condition_met(&self, id: ObjectId, c: &crate::card::EntryCondition) -> bool {
+        use crate::card::EntryCondition as E;
+        let me = self.objects[&id].base_controller;
+        let mine: Vec<&GameObject> = self
+            .battlefield
+            .iter()
+            .filter(|x| **x != id)
+            .filter_map(|x| self.objects.get(x))
+            .filter(|o| o.base_controller == me)
+            .collect();
+        let lands = || mine.iter().filter(|o| o.def.has_type(CardType::Land));
+        match c {
+            E::ControlLandType(types) => {
+                lands().any(|o| o.def.subtypes.iter().any(|s| types.contains(s)))
+            }
+            E::AtMostOtherLands(n) => lands().count() as u32 <= *n,
+            E::AtLeastOtherLands(n) => lands().count() as u32 >= *n,
+            E::AtLeastBasicLands(n) => {
+                lands()
+                    .filter(|o| o.def.supertypes.contains(&crate::card::Supertype::Basic))
+                    .count() as u32
+                    >= *n
+            }
+            E::TwoOrMoreOpponents => {
+                self.players
+                    .iter()
+                    .filter(|p| p.id != me && !p.has_lost && !p.has_left)
+                    .count()
+                    >= 2
+            }
+            E::PlayerAtOrBelowLife(n) => self
+                .players
+                .iter()
+                .any(|p| !p.has_lost && !p.has_left && p.life <= *n),
+            E::ControlType(t) => mine.iter().any(|o| o.def.has_type(*t)),
         }
     }
 

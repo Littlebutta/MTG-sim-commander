@@ -96,9 +96,46 @@ pub enum Keyword {
     CantBlock,
     CantBeBlocked,
     CantBeCountered,
+    Fear,
+    Intimidate,
+    Shadow,
+    Horsemanship,
+    Skulk,
+    Plainswalk,
+    Islandwalk,
+    Swampwalk,
+    Mountainwalk,
+    Forestwalk,
+    /// "~ can block only creatures with flying."
+    CanBlockOnlyFlyers,
+    /// "~ can't be blocked by more than one creature."
+    CantBeBlockedByMoreThanOne,
+    ProtectionFromWhite,
+    ProtectionFromBlue,
+    ProtectionFromBlack,
+    ProtectionFromRed,
+    ProtectionFromGreen,
+    /// Every creature type (CR 702.73).
+    Changeling,
+    /// Colorless (CR 702.114); the colors themselves come from the card data.
+    Devoid,
+    /// "~ doesn't untap during your untap step."
+    DoesntUntap,
 }
 
 impl Keyword {
+    /// The color this keyword grants protection from, if it's a protection keyword.
+    pub fn protection_color(self) -> Option<Color> {
+        Some(match self {
+            Keyword::ProtectionFromWhite => Color::White,
+            Keyword::ProtectionFromBlue => Color::Blue,
+            Keyword::ProtectionFromBlack => Color::Black,
+            Keyword::ProtectionFromRed => Color::Red,
+            Keyword::ProtectionFromGreen => Color::Green,
+            _ => return None,
+        })
+    }
+
     /// How the game names it to players.
     pub fn label(self) -> String {
         match self {
@@ -106,6 +143,14 @@ impl Keyword {
             Keyword::CantBlock => "Can't block".into(),
             Keyword::CantBeBlocked => "Can't be blocked".into(),
             Keyword::CantBeCountered => "Can't be countered".into(),
+            Keyword::CanBlockOnlyFlyers => "Can block only flyers".into(),
+            Keyword::CantBeBlockedByMoreThanOne => "Can't be blocked by more than one".into(),
+            Keyword::DoesntUntap => "Doesn't untap".into(),
+            Keyword::ProtectionFromWhite => "Protection from white".into(),
+            Keyword::ProtectionFromBlue => "Protection from blue".into(),
+            Keyword::ProtectionFromBlack => "Protection from black".into(),
+            Keyword::ProtectionFromRed => "Protection from red".into(),
+            Keyword::ProtectionFromGreen => "Protection from green".into(),
             k => format!("{k:?}"),
         }
     }
@@ -128,6 +173,23 @@ impl Keyword {
             "vigilance" => Keyword::Vigilance,
             "shroud" => Keyword::Shroud,
             "prowess" => Keyword::Prowess,
+            "fear" => Keyword::Fear,
+            "intimidate" => Keyword::Intimidate,
+            "shadow" => Keyword::Shadow,
+            "horsemanship" => Keyword::Horsemanship,
+            "skulk" => Keyword::Skulk,
+            "plainswalk" => Keyword::Plainswalk,
+            "islandwalk" => Keyword::Islandwalk,
+            "swampwalk" => Keyword::Swampwalk,
+            "mountainwalk" => Keyword::Mountainwalk,
+            "forestwalk" => Keyword::Forestwalk,
+            "protection from white" => Keyword::ProtectionFromWhite,
+            "protection from blue" => Keyword::ProtectionFromBlue,
+            "protection from black" => Keyword::ProtectionFromBlack,
+            "protection from red" => Keyword::ProtectionFromRed,
+            "protection from green" => Keyword::ProtectionFromGreen,
+            "changeling" => Keyword::Changeling,
+            "devoid" => Keyword::Devoid,
             _ => return None,
         })
     }
@@ -367,6 +429,33 @@ pub enum Effect {
     ControllerOfTargetGainsLifeEqualToPower {
         target: usize,
     },
+    /// Give the target (or the source, if `None`) a regeneration shield (CR 701.19).
+    Regenerate {
+        target: Option<usize>,
+    },
+    /// The source permanent returns to its owner's hand.
+    ReturnThisToHand,
+    /// Untap the source permanent.
+    UntapThis,
+}
+
+/// The condition of an "enters tapped unless" land, checked as it enters.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EntryCondition {
+    /// You control a land with one of these subtypes.
+    ControlLandType(Vec<String>),
+    /// You control at most N other lands.
+    AtMostOtherLands(u32),
+    /// You control at least N other lands.
+    AtLeastOtherLands(u32),
+    /// You control at least N basic lands.
+    AtLeastBasicLands(u32),
+    /// You have two or more opponents.
+    TwoOrMoreOpponents,
+    /// A player has N or less life.
+    PlayerAtOrBelowLife(i32),
+    /// You control a permanent of this type.
+    ControlType(CardType),
 }
 
 /// Where searched-for cards go.
@@ -508,6 +597,21 @@ pub struct Cost {
     /// always comes with the mana, so it rides along here.
     #[serde(default)]
     pub deals_damage_to_you: u32,
+    /// "Activate only once each turn."
+    #[serde(default)]
+    pub once_per_turn: bool,
+    /// Discard this many cards (chosen automatically for now).
+    #[serde(default)]
+    pub discard: u32,
+    /// Sacrifice this many permanents matching the filter (chosen automatically for now).
+    #[serde(default)]
+    pub sacrifice: Option<(Filter, u32)>,
+    /// Remove counters from the source.
+    #[serde(default)]
+    pub remove_counters: Option<(CounterKind, u32)>,
+    /// Cycling and similar: the ability works from your hand, and discarding the card pays it.
+    #[serde(default)]
+    pub discard_this: bool,
 }
 
 impl Cost {
@@ -546,6 +650,20 @@ pub enum TriggerEvent {
     Attacks(Filter),
     /// "Whenever [filter] deals combat damage to a player"
     DealsCombatDamageToPlayer(Filter),
+    /// "Whenever you gain life"
+    YouGainLife,
+    /// "At the beginning of combat on your turn" / "of each combat".
+    BeginningOfCombat(PlayerRef),
+    /// "At the beginning of your precombat main phase" / "first main phase".
+    BeginningOfFirstMain(PlayerRef),
+    /// "When ~ leaves the battlefield" (looks back in time, CR 603.10a).
+    LeavesBattlefield(Filter),
+    /// "Whenever you attack" (once per combat, CR 508.3).
+    YouAttack,
+    /// "When you cast this spell" (triggers from the stack).
+    CastThis,
+    /// "Whenever an opponent casts a spell" / "Whenever a player casts a spell".
+    PlayerCastsSpell(PlayerRef, Filter),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -587,6 +705,8 @@ pub enum Ability {
     },
     /// "You have no maximum hand size."
     NoMaxHandSize,
+    /// "~ enters tapped unless ..." (checklands, fastlands, slowlands, battlelands...).
+    EntersTappedUnless(EntryCondition),
     /// Text the engine can't execute yet; kept so the UI can show it and flag the card.
     Unsupported(String),
 }
@@ -616,13 +736,43 @@ pub struct CardDef {
     /// Instructions performed when this instant/sorcery resolves.
     pub spell_targets: Vec<TargetSpec>,
     pub spell_effects: Vec<Effect>,
+    /// Modal spells ("Choose one —", CR 700.2): when not empty, the caster picks one of these
+    /// and it replaces `spell_targets` / `spell_effects`.
+    #[serde(default)]
+    pub spell_modes: Vec<SpellMode>,
     pub oracle_text: String,
     /// Color identity for Commander deck building (CR 903.4), precomputed by the importer.
     pub color_identity: ColorSet,
     pub is_token: bool,
 }
 
+/// One mode of a modal spell.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SpellMode {
+    pub text: String,
+    pub targets: Vec<TargetSpec>,
+    pub effects: Vec<Effect>,
+}
+
 impl CardDef {
+    /// Targets and effects of the spell as cast in `mode` (ignored for non-modal spells).
+    /// None if the spell is modal and the mode doesn't exist.
+    pub fn spell_parts(&self, mode: Option<usize>) -> Option<(&[TargetSpec], &[Effect])> {
+        if self.spell_modes.is_empty() {
+            return Some((&self.spell_targets, &self.spell_effects));
+        }
+        let m = self.spell_modes.get(mode?)?;
+        Some((&m.targets, &m.effects))
+    }
+
+    /// The modes a caster can pick from: `[None]` for a normal spell.
+    pub fn mode_choices(&self) -> Vec<Option<usize>> {
+        if self.spell_modes.is_empty() {
+            vec![None]
+        } else {
+            (0..self.spell_modes.len()).map(Some).collect()
+        }
+    }
     pub fn colors(&self) -> ColorSet {
         self.color_indicator
             .unwrap_or_else(|| self.mana_cost.colors())

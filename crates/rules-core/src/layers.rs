@@ -68,6 +68,19 @@ impl Characteristics {
     }
     pub fn has_subtype(&self, s: &str) -> bool {
         self.subtypes.iter().any(|x| x.eq_ignore_ascii_case(s))
+            || (self.has_keyword(Keyword::Changeling) && is_creature_type(s))
+    }
+    /// Colors this object has protection from (CR 702.16).
+    pub fn protected_from(&self) -> ColorSet {
+        let mut cs = ColorSet::default();
+        for a in &self.abilities {
+            if let Ability::Keyword(k) = a.ability {
+                if let Some(c) = k.protection_color() {
+                    cs.insert(c);
+                }
+            }
+        }
+        cs
     }
     pub fn has_keyword(&self, k: Keyword) -> bool {
         self.abilities
@@ -792,4 +805,63 @@ impl Game {
             .get(&id)
             .is_some_and(|o| o.zone == Zone::Battlefield)
     }
+}
+
+/// Whether a subtype is a creature type, for changeling (CR 205.3m). Anything that isn't a
+/// known non-creature subtype counts.
+pub fn is_creature_type(s: &str) -> bool {
+    const OTHER: &[&str] = &[
+        "Plains",
+        "Island",
+        "Swamp",
+        "Mountain",
+        "Forest",
+        "Desert",
+        "Gate",
+        "Lair",
+        "Locus",
+        "Mine",
+        "Power-Plant",
+        "Tower",
+        "Urza's",
+        "Cave",
+        "Sphere",
+        "Town",
+        "Aura",
+        "Cartouche",
+        "Case",
+        "Class",
+        "Curse",
+        "Room",
+        "Rune",
+        "Saga",
+        "Shard",
+        "Shrine",
+        "Role",
+        "Background",
+        "Equipment",
+        "Vehicle",
+        "Fortification",
+        "Contraption",
+        "Treasure",
+        "Food",
+        "Clue",
+        "Blood",
+        "Gold",
+        "Map",
+        "Powerstone",
+        "Incubator",
+        "Attraction",
+        "Bobblehead",
+        "Junk",
+        "Lander",
+        "Spacecraft",
+        "Arcane",
+        "Trap",
+        "Lesson",
+        "Adventure",
+        "Omen",
+        "Siege",
+    ];
+    !OTHER.iter().any(|o| o.eq_ignore_ascii_case(s))
 }

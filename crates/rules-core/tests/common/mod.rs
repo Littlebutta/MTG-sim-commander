@@ -401,6 +401,7 @@ pub fn cast(g: &mut Game, p: PlayerId, card: ObjectId, targets: Vec<Target>) {
             card,
             targets,
             x: 0,
+            mode: None,
         },
     )
     .unwrap();

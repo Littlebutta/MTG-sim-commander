@@ -25,7 +25,8 @@ type Mode =
       /** Triggered abilities must go on the stack; they can't be called off. */
       cancellable: boolean;
     }
-  | { kind: "abilities"; card: CardView };
+  | { kind: "abilities"; card: CardView; cast?: boolean }
+  | { kind: "modes"; card: CardView; first?: Target };
 
 const SunIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
@@ -459,8 +460,15 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     else setMode({ ...mode, chosen: [] });
   };
 
-  const beginCast = (c: CardView, first?: Target) => {
-    const slots = view.hints.cast_targets[c.id] ?? [];
+  const beginCast = (c: CardView, first?: Target, spellMode?: number) => {
+    // Modal spells pick a mode first (CR 700.2); only modes with legal targets are offered.
+    if (c.spell_modes?.length && spellMode === undefined) {
+      setMode({ kind: "modes", card: c, first });
+      return;
+    }
+    const m = spellMode ?? null;
+    const slots = (m === null ? view.hints.cast_targets[c.id] : view.hints.mode_targets?.[`${c.id}:${m}`]) ?? [];
+    const labels = m === null ? c.spell_targets : c.spell_modes?.[m]?.[1] ?? [];
     let x = 0;
     if (c.has_x) {
       const pool = Object.values(me.mana_pool).reduce((a, b) => a + b, 0);
@@ -468,10 +476,12 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       if (answer === null) return;
       x = Math.max(0, parseInt(answer, 10) || 0);
     }
-    if (slots.length === 0) act({ Cast: { card: c.id, targets: [], x } });
-    else {
+    if (slots.length === 0) {
+      setMode({ kind: "idle" });
+      act({ Cast: { card: c.id, targets: [], x, mode: m } });
+    } else {
       const chosen = first && slots[0]?.some((o) => sameTarget(o, first)) ? [first] : [];
-      setMode({ kind: "target", title: `${c.name}: choose ${c.spell_targets[0] ?? "a target"}`, slots, chosen, source: c.id, cancellable: true, build: (t) => ({ Cast: { card: c.id, targets: t, x } }) });
+      setMode({ kind: "target", title: `${c.name}: choose ${labels[0] ?? "a target"}`, slots, chosen, source: c.id, cancellable: true, build: (t) => ({ Cast: { card: c.id, targets: t, x, mode: m } }) });
     }
   };
 
@@ -545,7 +555,15 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   // ---------------------------------------------------------------- clicks
   const clickHand = (c: CardView) => {
     if (mode.kind === "target") return;
-    if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
+    // Cycling and other abilities that work from your hand.
+    const fromHand = c.abilities.some((a) => a.activatable);
+    const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
+    if (fromHand && playable) setMode({ kind: "abilities", card: c, cast: true });
+    else if (fromHand) {
+      const usable = c.abilities.filter((a) => a.activatable);
+      if (usable.length === 1) activate(c, usable[0].index);
+      else setMode({ kind: "abilities", card: c });
+    } else if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
     else if (view.hints.castable.includes(c.id)) beginCast(c);
   };
 
@@ -1031,7 +1049,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
           {hand.map((c, i) => {
             const n = hand.length;
             const offset = i - (n - 1) / 2;
-            const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
+            const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id) || c.abilities.some((a) => a.activatable);
             return (
               <Card key={c.id} card={c} size="hand" glow={playable && mode.kind === "idle" ? "play" : mode.kind === "target" && mode.source === c.id ? "selected" : null}
                 dim={mode.kind === "target" && mode.source !== c.id}
@@ -1204,11 +1222,38 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         <div className="scrim" onClick={() => setMode({ kind: "idle" })}>
           <div className="menu" onClick={(e) => e.stopPropagation()}>
             <div className="menu-title">{mode.card.name}</div>
+            {mode.cast && (
+              <button className="menu-item" onClick={() => {
+                const c = mode.card;
+                setMode({ kind: "idle" });
+                if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
+                else beginCast(c);
+              }}>
+                <span>{view.hints.playable_lands.includes(mode.card.id) ? "Play this land" : "Cast this spell"}</span>
+              </button>
+            )}
             {mode.card.abilities.filter((a) => a.activatable).map((a) => (
               <button key={a.index} className="menu-item" onClick={() => activate(mode.card, a.index)}>
                 <ManaCost cost={a.label.split(":")[0]} /> <span>{a.label.split(": ").slice(1).join(": ")}</span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mode menu for modal spells */}
+      {mode.kind === "modes" && (
+        <div className="scrim" onClick={() => setMode({ kind: "idle" })}>
+          <div className="menu" onClick={(e) => e.stopPropagation()}>
+            <div className="menu-title">{mode.card.name}: choose one</div>
+            {(mode.card.spell_modes ?? []).map(([text], i) => {
+              const ok = view.hints.mode_targets?.[`${mode.card.id}:${i}`] !== undefined;
+              return (
+                <button key={i} className="menu-item" disabled={!ok} onClick={() => beginCast(mode.card, mode.first, i)}>
+                  <span>{text}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

@@ -59,6 +59,7 @@ fn sorcery_speed_rules() {
             card: bear,
             targets: vec![],
             x: 0,
+            mode: None,
         },
     );
     assert!(
@@ -145,6 +146,7 @@ fn casting_auto_taps_lands_and_rejects_unpayable_costs() {
             card: bear,
             targets: vec![],
             x: 0,
+            mode: None,
         },
     );
     assert!(
