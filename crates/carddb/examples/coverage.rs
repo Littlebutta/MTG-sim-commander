@@ -50,6 +50,8 @@ fn main() {
     let mut legal = 0;
     let mut legal_ok = 0;
     let mut lines: HashMap<String, (usize, String)> = HashMap::new();
+    // Wordings that are the only thing keeping a card from being fully supported.
+    let mut only: HashMap<String, usize> = HashMap::new();
     for r in &records {
         // Un-cards, tokens and other oddities that can't be in a deck.
         if matches!(
@@ -58,7 +60,7 @@ fn main() {
         ) {
             continue;
         }
-        let in_commander = r.commander_legality.as_deref() == Some("legal");
+        let in_commander = r.commander_legality.as_deref() == Some("Legal");
         let unsupported: Vec<&String> = std::iter::once(&r.def)
             .chain(&r.other_faces)
             .flat_map(|d| d.abilities.iter())
@@ -72,6 +74,22 @@ fn main() {
         if unsupported.is_empty() {
             ok += 1;
             legal_ok += in_commander as usize;
+        }
+        if in_commander {
+            if let Ok(path) = std::env::var("COVERAGE_DUMP") {
+                use std::io::Write;
+                let mut f = std::fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(path)
+                    .unwrap();
+                for l in &unsupported {
+                    writeln!(f, "{}\t{}", r.def.name, l).unwrap();
+                }
+            }
+        }
+        if in_commander && unsupported.len() == 1 {
+            *only.entry(shape(unsupported[0])).or_default() += 1;
         }
         if in_commander {
             for l in unsupported {
@@ -94,5 +112,11 @@ fn main() {
     v.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
     for (l, (n, example)) in v.into_iter().take(top) {
         println!("{n:6}  {l}   [{example}]");
+    }
+    println!("\nWordings that are a card's only unsupported line (fixing one unlocks that many):");
+    let mut v: Vec<_> = only.into_iter().collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    for (l, n) in v.into_iter().take(top) {
+        println!("{n:6}  {l}");
     }
 }

@@ -47,6 +47,8 @@ pub struct CardView {
     pub abilities: Vec<AbilityView>,
     /// Target descriptions for casting this card (empty if it doesn't target).
     pub spell_targets: Vec<String>,
+    /// Modal spells: each mode's text and target descriptions.
+    pub spell_modes: Vec<(String, Vec<String>)>,
     pub has_x: bool,
     pub unsupported: bool,
     pub zone: String,
@@ -105,6 +107,8 @@ pub struct Hints {
     pub block_options: Vec<(u32, Vec<u32>)>,
     /// For each castable card / activatable ability: the legal choices per target slot.
     pub cast_targets: BTreeMap<u32, Vec<Vec<Target>>>,
+    /// Modal spells: the legal choices per target slot for each castable mode ("card:mode").
+    pub mode_targets: BTreeMap<String, Vec<Vec<Target>>>,
     pub ability_targets: BTreeMap<String, Vec<Vec<Target>>>,
     pub triggers: Vec<TriggerChoiceView>,
     pub discard_count: usize,
@@ -244,6 +248,17 @@ pub(crate) fn card_view(
             .map(|(_, a)| a.0),
         abilities,
         spell_targets: o.def.spell_targets.iter().map(target_spec_label).collect(),
+        spell_modes: o
+            .def
+            .spell_modes
+            .iter()
+            .map(|m| {
+                (
+                    m.text.clone(),
+                    m.targets.iter().map(target_spec_label).collect(),
+                )
+            })
+            .collect(),
         has_x: o.def.mana_cost.has_x(),
         unsupported: !o.def.fully_supported(),
         zone: format!("{:?}", o.zone),
@@ -394,6 +409,27 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
             )
         })
         .collect();
+    let mode_targets = castable
+        .iter()
+        .flat_map(|id| {
+            let def = &g.object(*id).unwrap().def;
+            def.spell_modes
+                .iter()
+                .enumerate()
+                .filter_map(|(m, mode)| {
+                    let slots: Vec<Vec<Target>> = mode
+                        .targets
+                        .iter()
+                        .map(|s| g.legal_targets(viewer, Some(*id), s))
+                        .collect();
+                    slots
+                        .iter()
+                        .all(|s| !s.is_empty())
+                        .then(|| (format!("{}:{m}", id.0), slots))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
     let ability_targets = activatable
         .iter()
         .filter_map(|(id, i)| {
@@ -444,6 +480,7 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
         },
         playable_lands: g.playable_lands(viewer).iter().map(|i| i.0).collect(),
         castable: castable.iter().map(|i| i.0).collect(),
+        mode_targets,
         activatable: activatable.iter().map(|(o, i)| (o.0, *i)).collect(),
         attackers: if matches!(decision, Decision::DeclareAttackers { player } if player == viewer)
         {

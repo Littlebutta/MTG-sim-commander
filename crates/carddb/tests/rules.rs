@@ -390,3 +390,273 @@ fn prowess_pumps_on_noncreature_spells() {
     resolve_all(&mut g);
     assert_eq!(pt(&g, monk), (3, 3));
 }
+
+fn find(g: &Game, name: &str) -> ObjectId {
+    *g.battlefield
+        .iter()
+        .find(|id| g.object(**id).unwrap().def.name == name)
+        .unwrap()
+}
+
+#[test]
+fn cycling_discards_from_hand_and_draws() {
+    let mut g = game(2);
+    let crash = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Airship Crash",
+            "{2}{G}",
+            &[CardType::Instant],
+            &[],
+            "Destroy target artifact, enchantment, or creature with flying.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+        ),
+    );
+    assert!(g.activatable(P0).is_empty()); // no mana yet
+    add_mana(&mut g, P0, "CC");
+    let ability = g
+        .activatable(P0)
+        .iter()
+        .find(|(o, _)| *o == crash)
+        .unwrap()
+        .1;
+    let hand = g.hand(P0).len();
+    g.submit(
+        P0,
+        Action::Activate {
+            object: crash,
+            ability,
+            targets: vec![],
+            x: 0,
+        },
+    )
+    .unwrap();
+    resolve_all(&mut g);
+    // The cycled card left, a new card came in.
+    assert_eq!(g.hand(P0).len(), hand);
+    assert!(!g.hand(P0).contains(&crash));
+    assert!(g
+        .player(P0)
+        .graveyard
+        .iter()
+        .any(|id| g.object(*id).unwrap().def.name == "Airship Crash"));
+}
+
+#[test]
+fn modal_spells_do_the_chosen_mode() {
+    let mut g = game(2);
+    let bear = put(&mut g, P1, bears());
+    let charm = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Charm",
+            "{R}",
+            &[CardType::Instant],
+            &[],
+            "Choose one —\n• Target player gains 5 life.\n• Destroy target creature.",
+        ),
+    );
+    assert_eq!(g.object(charm).unwrap().def.spell_modes.len(), 2);
+    add_mana(&mut g, P0, "R");
+    // A mode is required, and targets are checked against that mode.
+    assert!(g
+        .submit(
+            P0,
+            Action::Cast {
+                card: charm,
+                targets: vec![Target::Object(bear)],
+                x: 0,
+                mode: None
+            }
+        )
+        .is_err());
+    assert!(g
+        .submit(
+            P0,
+            Action::Cast {
+                card: charm,
+                targets: vec![Target::Object(bear)],
+                x: 0,
+                mode: Some(0)
+            }
+        )
+        .is_err());
+    g.submit(
+        P0,
+        Action::Cast {
+            card: charm,
+            targets: vec![Target::Object(bear)],
+            x: 0,
+            mode: Some(1),
+        },
+    )
+    .unwrap();
+    resolve_all(&mut g);
+    assert!(!g.battlefield.contains(&bear));
+}
+
+#[test]
+fn regeneration_saves_a_creature_once() {
+    let mut g = game(2);
+    let troll = put(
+        &mut g,
+        P0,
+        card(
+            "Test Troll",
+            "{1}{G}",
+            &[CardType::Creature],
+            &["Troll"],
+            "{G}: Regenerate Test Troll.",
+        ),
+    );
+    add_mana(&mut g, P0, "G");
+    g.submit(
+        P0,
+        Action::Activate {
+            object: troll,
+            ability: 0,
+            targets: vec![],
+            x: 0,
+        },
+    )
+    .unwrap();
+    resolve_all(&mut g);
+    for alive in [true, false] {
+        let b = in_hand(&mut g, P0, bolt());
+        add_mana(&mut g, P0, "R");
+        cast(&mut g, P0, b, vec![Target::Object(troll)]);
+        resolve_all(&mut g);
+        assert_eq!(g.battlefield.contains(&troll), alive);
+        if alive {
+            assert!(g.object(troll).unwrap().tapped);
+        }
+    }
+}
+
+#[test]
+fn protection_stops_targeting_and_damage_and_landwalk_stops_blocks() {
+    let mut g = game(2);
+    let knight = put(
+        &mut g,
+        P1,
+        card(
+            "White Knight",
+            "{W}{W}",
+            &[CardType::Creature],
+            &["Knight"],
+            "First strike\nProtection from red",
+        ),
+    );
+    let b = in_hand(&mut g, P0, bolt());
+    add_mana(&mut g, P0, "R");
+    assert!(g
+        .submit(
+            P0,
+            Action::Cast {
+                card: b,
+                targets: vec![Target::Object(knight)],
+                x: 0,
+                mode: None
+            }
+        )
+        .is_err());
+
+    let walker = put(
+        &mut g,
+        P0,
+        card(
+            "Forest Walker",
+            "{G}",
+            &[CardType::Creature],
+            &[],
+            "Forestwalk",
+        ),
+    );
+    put(&mut g, P1, forest());
+    let blocker = put(&mut g, P1, bears());
+    while !matches!(g.decision(), Decision::DeclareAttackers { .. }) {
+        default_answer(&mut g);
+    }
+    g.submit(P0, Action::Attack(vec![(walker, P1)])).unwrap();
+    while !matches!(g.decision(), Decision::DeclareBlockers { .. }) {
+        default_answer(&mut g);
+    }
+    assert!(g
+        .submit(P1, Action::Block(vec![(blocker, walker)]))
+        .is_err());
+}
+
+#[test]
+fn checklands_enter_untapped_with_the_right_land() {
+    let mut g = game(2);
+    let text =
+        "This land enters tapped unless you control a Forest or an Island.\n{T}: Add {G} or {U}.";
+    let first = put(
+        &mut g,
+        P0,
+        card("Hinterland Harbor", "", &[CardType::Land], &[], text),
+    );
+    assert!(g.object(first).unwrap().tapped);
+    put(&mut g, P0, forest());
+    let second = put(
+        &mut g,
+        P0,
+        card("Hinterland Harbor", "", &[CardType::Land], &[], text),
+    );
+    assert!(!g.object(second).unwrap().tapped);
+}
+
+#[test]
+fn cast_and_combat_triggers_and_sacrifice_costs() {
+    let mut g = game(2);
+    let hand = g.hand(P0).len();
+    let seer = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Cast Seer",
+            "{1}",
+            &[CardType::Creature],
+            &[],
+            "When you cast this spell, draw a card.",
+        ),
+    );
+    add_mana(&mut g, P0, "C");
+    cast(&mut g, P0, seer, vec![]);
+    resolve_all(&mut g);
+    // Seer went from hand to the battlefield, and its cast trigger drew a card.
+    assert_eq!(g.hand(P0).len(), hand + 1);
+
+    let altar = put(
+        &mut g,
+        P0,
+        card(
+            "Test Altar",
+            "{1}",
+            &[CardType::Artifact],
+            &[],
+            "Sacrifice a creature: You gain 2 life.\nAt the beginning of combat on your turn, you gain 1 life.",
+        ),
+    );
+    let life = g.player(P0).life;
+    g.submit(
+        P0,
+        Action::Activate {
+            object: altar,
+            ability: 0,
+            targets: vec![],
+            x: 0,
+        },
+    )
+    .unwrap();
+    resolve_all(&mut g);
+    assert_eq!(g.player(P0).life, life + 2);
+    assert!(g.battlefield.contains(&find(&g, "Test Altar")));
+    assert!(!g
+        .battlefield
+        .iter()
+        .any(|id| g.object(*id).unwrap().def.name == "Cast Seer"));
+    pass_until(&mut g, Step::BeginCombat);
+    assert_eq!(g.player(P0).life, life + 3);
+}

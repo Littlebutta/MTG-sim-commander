@@ -43,6 +43,12 @@ pub struct GameObject {
     /// A loyalty ability of this permanent was activated this turn (CR 606.3).
     #[serde(default)]
     pub loyalty_used: bool,
+    /// Regeneration shields until end of turn (CR 701.19).
+    #[serde(default)]
+    pub regen_shields: u32,
+    /// Indices of "activate only once each turn" abilities used this turn.
+    #[serde(default)]
+    pub activated_this_turn: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -83,6 +89,9 @@ pub struct StackEntry {
     pub kind: StackKind,
     pub targets: Vec<Target>,
     pub x: u32,
+    /// The mode a modal spell was cast with.
+    #[serde(default)]
+    pub mode: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

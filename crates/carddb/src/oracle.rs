@@ -14,8 +14,44 @@ pub fn script(def: &mut CardDef, name: &str, text: &str) {
     let mut spell_ok = true;
     let mut spell_targets = Vec::new();
     let mut spell_effects = Vec::new();
-    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
-        let line = strip_ability_word(line);
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = strip_ability_word(lines[i]);
+        i += 1;
+        // "Choose one —" followed by "• mode" lines (CR 700.2).
+        if is_spell && line.to_lowercase() == "choose one —" {
+            let mut modes = Vec::new();
+            let mut ok = true;
+            while let Some(m) = lines.get(i).and_then(|l| l.strip_prefix("• ")) {
+                i += 1;
+                let mut targets = Vec::new();
+                match parse_effects(m, &mut targets) {
+                    Some(effects) => modes.push(SpellMode {
+                        text: m.to_string(),
+                        targets,
+                        effects,
+                    }),
+                    None => {
+                        ok = false;
+                        def.abilities.push(Ability::Unsupported(format!("• {m}")));
+                    }
+                }
+            }
+            if ok && modes.len() >= 2 {
+                def.spell_modes = modes;
+            } else {
+                spell_ok = false;
+                if ok {
+                    def.abilities.push(Ability::Unsupported(line.to_string()));
+                }
+            }
+            continue;
+        }
         // "Enchant creature": an Aura spell targets what it will enchant (CR 303.4a).
         if let Some(what) = line.strip_prefix("Enchant ") {
             match target_spec(&format!("target {}", what.to_lowercase())) {
@@ -25,7 +61,8 @@ pub fn script(def: &mut CardDef, name: &str, text: &str) {
             continue;
         }
         if is_spell {
-            if let Some(a) = parse_self_rule(&line.to_lowercase()) {
+            let lower = line.to_lowercase();
+            if let Some(a) = parse_self_rule(&lower).or_else(|| parse_cycling(&lower)) {
                 def.abilities.push(a);
                 continue;
             }
@@ -44,8 +81,20 @@ pub fn script(def: &mut CardDef, name: &str, text: &str) {
         }
     }
     if is_spell && spell_ok {
-        def.spell_targets = spell_targets;
-        def.spell_effects = spell_effects;
+        if !def.spell_modes.is_empty() && !spell_effects.is_empty() {
+            // Text besides the modes (rare): run it with every mode.
+            for m in &mut def.spell_modes {
+                if !spell_targets.is_empty() {
+                    def.abilities
+                        .push(Ability::Unsupported("modes plus targeted text".into()));
+                    break;
+                }
+                m.effects.extend(spell_effects.iter().cloned());
+            }
+        } else {
+            def.spell_targets = spell_targets;
+            def.spell_effects = spell_effects;
+        }
     }
 }
 
@@ -139,9 +188,73 @@ fn amount(w: &str) -> Option<Amount> {
     }
 }
 
+fn parse_cycling(l: &str) -> Option<Ability> {
+    // Cycling (CR 702.29): "Cycling {2}", "Basic landcycling {1}", "Swampcycling {2}",
+    // "Wizardcycling {3}". Discard this card from your hand: draw, or search for the type.
+    let cycling = l
+        .strip_prefix("basic landcycling ")
+        .map(|c| ("basic land", c))
+        .or_else(|| {
+            let (kw, c) = l.split_once(' ')?;
+            Some((kw.strip_suffix("cycling")?, c))
+        })
+        .filter(|(_, c)| c.starts_with('{'));
+    let (kind, c) = cycling?;
+    let effect = match kind {
+        "" => Effect::DrawCards {
+            who: PlayerRef::You,
+            amount: Amount::Fixed(1),
+        },
+        "basic land" => Effect::SearchLibrary {
+            filter: Filter {
+                any_of_types: vec![CardType::Land],
+                supertypes: vec![Supertype::Basic],
+                ..Default::default()
+            },
+            count: 1,
+            dest: SearchDest::Hand,
+        },
+        "land" => Effect::SearchLibrary {
+            filter: Filter::of_type(CardType::Land),
+            count: 1,
+            dest: SearchDest::Hand,
+        },
+        t => Effect::SearchLibrary {
+            filter: Filter {
+                subtypes: vec![capitalize(t)],
+                ..Default::default()
+            },
+            count: 1,
+            dest: SearchDest::Hand,
+        },
+    };
+    Some(Ability::Activated {
+        cost: Cost {
+            mana: ManaCost::parse(c).ok()?,
+            discard_this: true,
+            ..Default::default()
+        },
+        targets: vec![],
+        effects: vec![effect],
+        sorcery_speed: false,
+    })
+}
+
 fn parse_ability_line(line: &str) -> Option<Vec<Ability>> {
     let l = line.to_lowercase();
+    if deckbuilding_only(&l) {
+        return Some(vec![]);
+    }
+    if l.trim_end_matches('.') == "~ can't attack or block" {
+        return Some(vec![
+            Ability::Keyword(Keyword::CantAttack),
+            Ability::Keyword(Keyword::CantBlock),
+        ]);
+    }
     if let Some(a) = parse_self_rule(&l) {
+        return Some(vec![a]);
+    }
+    if let Some(a) = parse_cycling(&l) {
         return Some(vec![a]);
     }
     // "Equip {2}" (CR 702.6a): attach to target creature you control, as a sorcery.
@@ -161,6 +274,8 @@ fn parse_ability_line(line: &str) -> Option<Vec<Ability>> {
     }
     // Loyalty abilities: "+1: ...", "-2: ...", "0: ...".
     if let Some((n, effect)) = l.split_once(": ") {
+        // MTGJSON writes loyalty costs in brackets: "[+1]: ...".
+        let n = n.trim_start_matches('[').trim_end_matches(']');
         let signed = n.starts_with('+') || n.starts_with('-') || n == "0";
         if signed {
             let loyalty: i32 = n.trim_start_matches('+').parse().ok()?;
@@ -193,6 +308,14 @@ fn parse_self_rule(l: &str) -> Option<Ability> {
         "~ can't be countered" => Ability::Keyword(Keyword::CantBeCountered),
         "~ enters tapped" => Ability::EntersTapped,
         "you have no maximum hand size" => Ability::NoMaxHandSize,
+        "~ can block only creatures with flying" => Ability::Keyword(Keyword::CanBlockOnlyFlyers),
+        "~ can't be blocked by more than one creature" => {
+            Ability::Keyword(Keyword::CantBeBlockedByMoreThanOne)
+        }
+        "~ doesn't untap during your untap step" => Ability::Keyword(Keyword::DoesntUntap),
+        _ if l.starts_with("~ enters tapped unless ") => {
+            Ability::EntersTappedUnless(entry_condition(&l["~ enters tapped unless ".len()..])?)
+        }
         _ => {
             let rest = l.strip_prefix("~ enters with ")?;
             let (n, rest) = rest.split_once(' ')?;
@@ -206,6 +329,61 @@ fn parse_self_rule(l: &str) -> Option<Ability> {
             }
         }
     })
+}
+
+/// "you control a swamp or a forest", "you control two or fewer other lands", "you have two
+/// or more opponents", "a player has 10 or less life".
+fn entry_condition(s: &str) -> Option<EntryCondition> {
+    Some(match s {
+        "you have two or more opponents" => EntryCondition::TwoOrMoreOpponents,
+        "you control a planeswalker" => EntryCondition::ControlType(CardType::Planeswalker),
+        _ => {
+            if let Some(n) = s
+                .strip_prefix("a player has ")
+                .and_then(|r| r.strip_suffix(" or less life"))
+            {
+                return Some(EntryCondition::PlayerAtOrBelowLife(number(n)?));
+            }
+            let r = s.strip_prefix("you control ")?;
+            if let Some(n) = r.strip_suffix(" or fewer other lands") {
+                return Some(EntryCondition::AtMostOtherLands(number(n)? as u32));
+            }
+            if let Some(n) = r.strip_suffix(" or more other lands") {
+                return Some(EntryCondition::AtLeastOtherLands(number(n)? as u32));
+            }
+            if let Some(n) = r.strip_suffix(" or more basic lands") {
+                return Some(EntryCondition::AtLeastBasicLands(number(n)? as u32));
+            }
+            let names: Option<Vec<String>> = r
+                .replace(", or ", ", ")
+                .replace(" or ", ", ")
+                .split(", ")
+                .map(|w| {
+                    let w = w.strip_prefix("a ").or_else(|| w.strip_prefix("an "))?;
+                    [
+                        "plains", "island", "swamp", "mountain", "forest", "desert", "gate",
+                    ]
+                    .contains(&w)
+                    .then(|| capitalize(w))
+                })
+                .collect();
+            EntryCondition::ControlLandType(names?)
+        }
+    })
+}
+
+/// Lines that only matter for building a deck ("Partner", "Choose a Background").
+fn deckbuilding_only(l: &str) -> bool {
+    let l = l.trim_end_matches('.');
+    matches!(
+        l,
+        "partner"
+            | "choose a background"
+            | "~ can be your commander"
+            | "friends forever"
+            | "doctor's companion"
+    ) || l.starts_with("partner with ")
+        || l.starts_with("partner—")
 }
 
 /// The start of a triggered ability ("whenever ~ attacks, ") and what it triggers on. Some
@@ -376,6 +554,47 @@ fn trigger_prefix(l: &str) -> Option<(Vec<TriggerEvent>, &str)> {
             )],
         ),
         (
+            "whenever a creature dies, ",
+            vec![TriggerEvent::Dies(Filter::creatures())],
+        ),
+        (
+            "at the beginning of combat on your turn, ",
+            vec![TriggerEvent::BeginningOfCombat(PlayerRef::You)],
+        ),
+        (
+            "at the beginning of each combat, ",
+            vec![TriggerEvent::BeginningOfCombat(PlayerRef::Each)],
+        ),
+        (
+            "at the beginning of your precombat main phase, ",
+            vec![TriggerEvent::BeginningOfFirstMain(PlayerRef::You)],
+        ),
+        (
+            "at the beginning of your first main phase, ",
+            vec![TriggerEvent::BeginningOfFirstMain(PlayerRef::You)],
+        ),
+        (
+            "when ~ leaves the battlefield, ",
+            vec![TriggerEvent::LeavesBattlefield(Filter::this())],
+        ),
+        ("whenever you attack, ", vec![TriggerEvent::YouAttack]),
+        ("when you cast ~, ", vec![TriggerEvent::CastThis]),
+        ("when you cast this spell, ", vec![TriggerEvent::CastThis]),
+        (
+            "whenever an opponent casts a spell, ",
+            vec![TriggerEvent::PlayerCastsSpell(
+                PlayerRef::Opponents,
+                Filter::default(),
+            )],
+        ),
+        (
+            "whenever a player casts a spell, ",
+            vec![TriggerEvent::PlayerCastsSpell(
+                PlayerRef::Each,
+                Filter::default(),
+            )],
+        ),
+        (
             "at the beginning of your upkeep, ",
             vec![TriggerEvent::BeginningOfUpkeep(PlayerRef::You)],
         ),
@@ -403,6 +622,7 @@ fn trigger_prefix(l: &str) -> Option<(Vec<TriggerEvent>, &str)> {
             "whenever you cast a spell, ",
             vec![TriggerEvent::YouCastSpell(Filter::default())],
         ),
+        ("whenever you gain life, ", vec![TriggerEvent::YouGainLife]),
         (
             "whenever you cast an instant or sorcery spell, ",
             vec![TriggerEvent::YouCastSpell(Filter {
@@ -526,10 +746,16 @@ fn parse_ability_rest(l: &str) -> Option<Vec<Ability>> {
                 return Some(vec![Ability::Mana { cost, produces: m }]);
             }
         }
+        let (effect, once) = match effect.strip_suffix(" activate only once each turn.") {
+            Some(e) => (e, true),
+            None => (effect, false),
+        };
         let (effect, sorcery_speed) = match effect.strip_suffix(" activate only as a sorcery.") {
             Some(e) => (e, true),
             None => (effect, false),
         };
+        let mut cost = cost;
+        cost.once_per_turn = once;
         let mut targets = Vec::new();
         let effects = parse_effects(effect, &mut targets)?;
         return Some(vec![Ability::Activated {
@@ -543,7 +769,9 @@ fn parse_ability_rest(l: &str) -> Option<Vec<Ability>> {
 }
 
 fn parse_keyword_line(line: &str) -> Option<Vec<Ability>> {
-    let parts: Vec<&str> = line
+    // "protection from white and from blue" is two keywords.
+    let expanded = line.replace(" and from ", ", protection from ");
+    let parts: Vec<&str> = expanded
         .trim_end_matches('.')
         .split([',', ';'])
         .map(str::trim)
@@ -587,6 +815,43 @@ fn parse_cost(s: &str) -> Option<Cost> {
             cost.sacrifice_this = true;
         } else if let Some(n) = p.strip_prefix("pay ").and_then(|r| r.strip_suffix(" life")) {
             cost.pay_life = number(n)? as u32;
+        } else if let Some(r) = p.strip_prefix("discard ") {
+            cost.discard = match r {
+                "a card" => 1,
+                _ => number(r.strip_suffix(" cards")?)? as u32,
+            };
+        } else if let Some(r) = p.strip_prefix("sacrifice ") {
+            let (r, other) = match r.strip_prefix("another ") {
+                Some(r) => (r, true),
+                None => (r, false),
+            };
+            let (n, what) = r.split_once(' ')?;
+            let n = number(n)? as u32;
+            let what = if n > 1 {
+                what.trim_end_matches('s')
+            } else {
+                what
+            };
+            let mut f = group_singular(what)?;
+            f.other_than_this = other;
+            f.controller = Some(PlayerRef::You);
+            cost.sacrifice = Some((f, n));
+        } else if let Some(r) = p.strip_prefix("remove ") {
+            let (n, r) = r.split_once(' ')?;
+            let r = r
+                .strip_suffix(" from ~")?
+                .trim_end_matches(" counters")
+                .trim_end_matches(" counter");
+            let kind = match r {
+                "+1/+1" => CounterKind::PlusOnePlusOne,
+                "-1/-1" => CounterKind::MinusOneMinusOne,
+                "loyalty" => CounterKind::Loyalty,
+                other if other.chars().all(|c| c.is_alphabetic() || c == '-') => {
+                    CounterKind::Other(other.to_string())
+                }
+                _ => return None,
+            };
+            cost.remove_counters = Some((kind, number(n)? as u32));
         } else {
             return None;
         }
@@ -686,7 +951,7 @@ fn attached() -> Filter {
 /// Split "creatures you control get +1/+1" at each verb that could start the predicate.
 fn split_subject(l: &str) -> Vec<(&str, &str)> {
     let mut out = Vec::new();
-    for v in [" gets ", " get ", " has ", " have ", " can't "] {
+    for v in [" gets ", " get ", " has ", " have ", " can't ", " doesn't "] {
         let mut from = 0;
         while let Some(i) = l[from..].find(v) {
             let at = from + i;
@@ -741,6 +1006,7 @@ fn restriction(s: &str) -> Option<Vec<Keyword>> {
         "can't block" => vec![Keyword::CantBlock],
         "can't attack" => vec![Keyword::CantAttack],
         "can't be blocked" => vec![Keyword::CantBeBlocked],
+        "doesn't untap during its controller's untap step" => vec![Keyword::DoesntUntap],
         _ => return None,
     })
 }
@@ -1342,6 +1608,25 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
     if let Some(n) = s.strip_prefix("surveil ") {
         return Some(Effect::Surveil { amount: amount(n)? });
     }
+    if s == "regenerate ~" || s == "regenerate it" {
+        return Some(Effect::Regenerate { target: None });
+    }
+    if let Some(t) = s.strip_prefix("regenerate ") {
+        return Some(Effect::Regenerate {
+            target: Some(push_target(targets, t)?),
+        });
+    }
+    if s == "return ~ to its owner's hand" || s == "return ~ to your hand" {
+        return Some(Effect::ReturnThisToHand);
+    }
+    if s == "untap ~" {
+        return Some(Effect::UntapThis);
+    }
+    if let Some(t) = s.strip_prefix("attach it to ") {
+        return Some(Effect::Attach {
+            target: push_target(targets, t)?,
+        });
+    }
     if s == "investigate" {
         return parse_token("a clue token");
     }
@@ -1533,7 +1818,7 @@ fn parse_effect(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Effect> {
     if words.first() == Some(&"put") && s.contains("+1/+1 counter") {
         let n = amount(words.get(1)?)?;
         let on = s.split(" on ").nth(1)?;
-        let target = if on == "~" {
+        let target = if on == "~" || on == "it" {
             None
         } else {
             Some(push_target(targets, on)?)
@@ -1862,7 +2147,7 @@ mod tests {
     fn a_keyword_list_with_an_unknown_keyword_keeps_the_known_ones() {
         for text in [
             "Flying, ward {2}",
-            "Flying; protection from red",
+            "Flying; protection from artifacts",
             "Flying, first strike, landwalk",
         ] {
             let d = def("Test Drake", &[CardType::Creature], text);

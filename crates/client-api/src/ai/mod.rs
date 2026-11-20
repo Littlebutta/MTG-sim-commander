@@ -453,11 +453,21 @@ impl Brain {
                 0.0
             };
             for x in xs {
-                for targets in self.target_combos(g, Some(card), &def.spell_targets) {
-                    let action = Action::Cast { card, targets, x };
-                    if let Some(sim) = sim::try_action(g, me, action.clone()) {
-                        let score = self.score(&sim) - penalty;
-                        opts.push(Option_ { action, score });
+                for mode in def.mode_choices() {
+                    let Some((specs, _)) = def.spell_parts(mode) else {
+                        continue;
+                    };
+                    for targets in self.target_combos(g, Some(card), specs) {
+                        let action = Action::Cast {
+                            card,
+                            targets,
+                            x,
+                            mode,
+                        };
+                        if let Some(sim) = sim::try_action(g, me, action.clone()) {
+                            let score = self.score(&sim) - penalty;
+                            opts.push(Option_ { action, score });
+                        }
                     }
                 }
             }

@@ -119,9 +119,18 @@ fn priority(g: &Game, me: PlayerId) -> Action {
         .sort_by_key(|id| std::cmp::Reverse(view.get(*id).map(|c| c.mana_value()).unwrap_or(0)));
     for card in castable {
         let def = &g.object(card).unwrap().def;
+        // Modal spells: the first mode whose targets can all be picked.
+        let Some((mode, specs, effects)) = def.mode_choices().into_iter().find_map(|m| {
+            let (specs, effects) = def.spell_parts(m)?;
+            specs
+                .iter()
+                .all(|s| pick_target(g, me, Some(card), s).is_some())
+                .then_some((m, specs, effects))
+        }) else {
+            continue;
+        };
         // Don't counter or pump randomly; those need context the bot doesn't track.
-        if def
-            .spell_effects
+        if effects
             .iter()
             .any(|e| matches!(e, Effect::Counter { .. } | Effect::ApplyContinuous { .. }))
         {
@@ -130,17 +139,15 @@ fn priority(g: &Game, me: PlayerId) -> Action {
         if !g.stack.is_empty() {
             continue;
         }
-        let targets: Vec<Target> = def
-            .spell_targets
+        let targets: Vec<Target> = specs
             .iter()
             .filter_map(|s| pick_target(g, me, Some(card), s))
             .collect();
-        if targets.len() != def.spell_targets.len() {
+        if targets.len() != specs.len() {
             continue;
         }
         // Don't wipe our own board.
-        if def
-            .spell_effects
+        if effects
             .iter()
             .any(|e| matches!(e, Effect::DestroyAll { .. }))
         {
@@ -168,6 +175,7 @@ fn priority(g: &Game, me: PlayerId) -> Action {
             card,
             targets,
             x: 0,
+            mode,
         };
     }
     // Use non-mana activated abilities that deal damage or grow us, on our turn.

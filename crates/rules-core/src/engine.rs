@@ -98,6 +98,9 @@ pub enum Action {
         card: ObjectId,
         targets: Vec<Target>,
         x: u32,
+        /// Which mode of a modal spell (CR 700.2); None for other spells.
+        #[serde(default)]
+        mode: Option<usize>,
     },
     /// `ability` indexes the object's current abilities (`Characteristics::abilities`).
     Activate {
@@ -147,16 +150,6 @@ fn illegal<T>(s: impl Into<String>) -> Result<T, RulesError> {
     Err(RulesError::Illegal(s.into()))
 }
 
-/// Whether evasion abilities let `blocker` block `attacker` (CR 702.9b: flying).
-fn evasion_allows_block(attacker: &Characteristics, blocker: &Characteristics) -> bool {
-    if attacker.has_keyword(Keyword::CantBeBlocked) || blocker.has_keyword(Keyword::CantBlock) {
-        return false;
-    }
-    !attacker.has_keyword(Keyword::Flying)
-        || blocker.has_keyword(Keyword::Flying)
-        || blocker.has_keyword(Keyword::Reach)
-}
-
 /// What happened, for trigger checks (CR 603.2).
 #[derive(Clone, Debug)]
 enum Event {
@@ -176,6 +169,10 @@ enum Event {
         source: ObjectId,
         player: PlayerId,
     },
+    GainedLife(PlayerId),
+    BeginCombat(PlayerId),
+    FirstMain(PlayerId),
+    AttackersDeclared(PlayerId),
 }
 
 /// Bookkeeping for one resolving spell/ability.
@@ -238,8 +235,16 @@ impl Game {
                 self.play_land(player, card)?;
                 self.after_action(player);
             }
-            (Decision::Priority { .. }, Action::Cast { card, targets, x }) => {
-                self.cast_spell(player, card, targets, x)?;
+            (
+                Decision::Priority { .. },
+                Action::Cast {
+                    card,
+                    targets,
+                    x,
+                    mode,
+                },
+            ) => {
+                self.cast_spell(player, card, targets, x, mode)?;
                 self.after_action(player);
             }
             (
@@ -462,8 +467,13 @@ impl Game {
                 let ids: Vec<ObjectId> = self.battlefield.clone();
                 for id in ids {
                     if view.controller(id) == Some(ap) {
+                        let stays = view
+                            .get(id)
+                            .is_some_and(|c| c.has_keyword(Keyword::DoesntUntap));
                         if let Some(o) = self.object_mut(id) {
-                            o.tapped = false;
+                            if !stays {
+                                o.tapped = false;
+                            }
                             o.summoning_sick = false;
                             o.loyalty_used = false;
                         }
@@ -484,6 +494,12 @@ impl Game {
                 self.stage = Stage::PriorityCheck(self.priority_start_player());
             }
             Step::Main1 | Step::Main2 | Step::BeginCombat | Step::EndCombat => {
+                if self.step == Step::BeginCombat {
+                    self.fire(Event::BeginCombat(ap));
+                }
+                if self.step == Step::Main1 {
+                    self.fire(Event::FirstMain(ap));
+                }
                 self.stage = Stage::PriorityCheck(self.priority_start_player());
             }
             Step::DeclareAttackers => {
@@ -558,6 +574,8 @@ impl Game {
             if let Some(o) = self.object_mut(id) {
                 o.damage = 0;
                 o.damaged_by_deathtouch = false;
+                o.regen_shields = 0;
+                o.activated_this_turn.clear();
             }
         }
         self.effects.retain(|e| e.duration != Duration::EndOfTurn);
@@ -808,6 +826,7 @@ impl Game {
             },
             targets,
             x: 0,
+            mode: None,
         });
         self.version += 1;
     }
@@ -852,6 +871,7 @@ impl Game {
         card: ObjectId,
         targets: Vec<Target>,
         x: u32,
+        mode: Option<usize>,
     ) -> Result<(), RulesError> {
         let Some(o) = self.object(card).cloned() else {
             return illegal("no such card");
@@ -874,7 +894,10 @@ impl Game {
             return illegal("that can only be cast at sorcery speed (307.1)");
         }
         // 601.2c targets.
-        self.check_targets(p, Some(card), &def.spell_targets, &targets, true)?;
+        let Some((specs, _)) = def.spell_parts(mode) else {
+            return illegal("choose one of the spell's modes");
+        };
+        self.check_targets(p, Some(card), specs, &targets, true)?;
         // 601.2f total cost, including commander tax.
         let tax = if from_command {
             self.commander_tax(p, card)
@@ -901,6 +924,11 @@ impl Game {
             kind: StackKind::Spell,
             targets,
             x,
+            mode: if def.spell_modes.is_empty() {
+                None
+            } else {
+                mode
+            },
         });
         self.log(format!("{} casts {}.", self.player(p).name, def.name));
         self.fire(Event::Cast {
@@ -922,9 +950,6 @@ impl Game {
         let Some(ch) = view.get(object).cloned() else {
             return illegal("no such object");
         };
-        if !self.is_on_battlefield(object) || ch.controller != p {
-            return illegal("you don't control that permanent");
-        }
         let Some(inst) = ch.abilities.get(idx).cloned() else {
             return illegal("no such ability");
         };
@@ -938,11 +963,26 @@ impl Game {
         else {
             return illegal("that isn't an activated ability (mana abilities use ActivateMana)");
         };
+        if cost.discard_this {
+            if !self.player(p).hand.contains(&object) {
+                return illegal("that ability works only from your hand");
+            }
+        } else if !self.is_on_battlefield(object) || ch.controller != p {
+            return illegal("you don't control that permanent");
+        }
         if (*sorcery_speed || cost.loyalty.is_some()) && !self.sorcery_timing_ok(p) {
             return illegal("activate only as a sorcery");
         }
         self.check_targets(p, Some(object), specs, &targets, false)?;
+        if cost.once_per_turn && self.objects[&object].activated_this_turn.contains(&idx) {
+            return illegal("that ability can be activated only once each turn");
+        }
         self.pay_cost(p, object, &ch, cost, x)?;
+        if cost.once_per_turn {
+            if let Some(o) = self.object_mut(object) {
+                o.activated_this_turn.push(idx);
+            }
+        }
         let id = ObjectId(self.next_object);
         self.next_object += 1;
         self.stack.push(StackEntry {
@@ -955,6 +995,7 @@ impl Game {
             },
             targets,
             x,
+            mode: None,
         });
         self.version += 1;
         Ok(())
@@ -980,6 +1021,24 @@ impl Game {
         }
         if cost.pay_life as i32 > self.player(p).life {
             return illegal("not enough life");
+        }
+        if self.player(p).hand.len() < cost.discard as usize + cost.discard_this as usize {
+            return illegal("not enough cards in hand to discard");
+        }
+        let sac_choice = match &cost.sacrifice {
+            Some((f, n)) => {
+                let c = self.cost_sacrifice_choice(p, object, f, *n);
+                if c.len() < *n as usize {
+                    return illegal("nothing to sacrifice");
+                }
+                c
+            }
+            None => vec![],
+        };
+        if let Some((k, n)) = &cost.remove_counters {
+            if o.counters.get(k).copied().unwrap_or(0) < *n {
+                return illegal("not enough counters");
+            }
         }
         if let Some(l) = cost.loyalty {
             if o.loyalty_used {
@@ -1008,6 +1067,28 @@ impl Game {
             *c = (*c as i32 + l).max(0) as u32;
             o.counter_timestamp = ts;
             self.version += 1;
+        }
+        if let Some((k, n)) = &cost.remove_counters {
+            let ts = self.new_timestamp();
+            if let Some(o) = self.object_mut(object) {
+                if let Some(c) = o.counters.get_mut(k) {
+                    *c -= n;
+                }
+                o.counters.retain(|_, v| *v > 0);
+                o.counter_timestamp = ts;
+            }
+            self.version += 1;
+        }
+        if cost.discard_this {
+            self.move_object(object, Zone::Graveyard, None);
+        }
+        for _ in 0..cost.discard {
+            if let Some(c) = self.auto_discard_choice(p) {
+                self.move_object(c, Zone::Graveyard, None);
+            }
+        }
+        for id in sac_choice {
+            self.sacrifice(id);
         }
         if cost.sacrifice_this {
             self.sacrifice(object);
@@ -1199,6 +1280,9 @@ impl Game {
         let view = self.view();
         let lki = view.get(id).cloned();
         if let Some(new) = self.move_object(id, Zone::Graveyard, None) {
+            if let Some(l) = &lki {
+                self.fire_leaves(l, new);
+            }
             if let Some(l) = lki {
                 if l.is_creature() {
                     self.fire(Event::Died {
@@ -1220,8 +1304,19 @@ impl Game {
         spec: &TargetSpec,
         t: &Target,
     ) -> bool {
+        let src_colors = source
+            .and_then(|s| view.get(s))
+            .map(|c| c.colors)
+            .unwrap_or_default();
         let hexproof_ok = |id: ObjectId| {
             let c = view.get(id);
+            if c.is_some_and(|c| {
+                src_colors
+                    .iter()
+                    .any(|col| c.protected_from().contains(col))
+            }) {
+                return false; // 702.16b
+            }
             !(c.is_some_and(|c| {
                 (c.has_keyword(Keyword::Hexproof) && c.controller != controller)
                     || c.has_keyword(Keyword::Shroud)
@@ -1314,11 +1409,8 @@ impl Game {
             match &entry.kind {
                 StackKind::Spell => {
                     let o = &self.objects[&entry.id];
-                    (
-                        o.def.spell_targets.clone(),
-                        o.def.spell_effects.clone(),
-                        Some(entry.id),
-                    )
+                    let (t, e) = o.def.spell_parts(entry.mode).unwrap_or_default();
+                    (t.to_vec(), e.to_vec(), Some(entry.id))
                 }
                 StackKind::Ability {
                     source, ability, ..
@@ -1497,7 +1589,7 @@ impl Game {
             Effect::GainLife { who, amount } => {
                 let n = self.amount(r, amount);
                 for p in self.players_for(r, *who) {
-                    self.player_mut(p).life += n;
+                    self.gain_life(p, n);
                 }
             }
             Effect::LoseLife { who, amount } => {
@@ -1561,6 +1653,10 @@ impl Game {
                             .get(*id)
                             .is_some_and(|c| c.has_keyword(Keyword::Indestructible))
                     })
+                    .collect();
+                let objs: Vec<ObjectId> = objs
+                    .into_iter()
+                    .filter(|id| !self.regenerate(*id))
                     .collect();
                 self.leave_battlefield_many(&objs, Zone::Graveyard);
             }
@@ -1758,8 +1854,31 @@ impl Game {
                 // Uses last known information: the target has usually just left (Swords to Plowshares).
                 if r.legal.get(*target) == Some(&true) {
                     if let Some((ctl, pow)) = r.lki.get(*target).cloned().flatten() {
-                        self.player_mut(ctl).life += pow.max(0);
+                        self.gain_life(ctl, pow);
                     }
+                }
+            }
+            Effect::Regenerate { target } => {
+                let id = match target {
+                    Some(i) => self.target_obj(r, *i),
+                    None => r.source.filter(|s| self.is_on_battlefield(*s)),
+                };
+                if let Some(o) = id.and_then(|id| self.object_mut(id)) {
+                    o.regen_shields += 1;
+                }
+            }
+            Effect::ReturnThisToHand => {
+                if let Some(s) = r.source.filter(|s| self.is_on_battlefield(*s)) {
+                    self.leave_battlefield_to(s, Zone::Hand);
+                }
+            }
+            Effect::UntapThis => {
+                if let Some(o) = r
+                    .source
+                    .filter(|s| self.is_on_battlefield(*s))
+                    .and_then(|s| self.object_mut(s))
+                {
+                    o.tapped = false;
                 }
             }
             Effect::Sacrifice { who, filter } => {
@@ -1918,6 +2037,31 @@ impl Game {
         }
     }
 
+    /// What a "sacrifice a creature" cost sacrifices when the game chooses: tokens first, then
+    /// the cheapest.
+    pub(crate) fn cost_sacrifice_choice(
+        &self,
+        p: PlayerId,
+        source: ObjectId,
+        f: &Filter,
+        n: u32,
+    ) -> Vec<ObjectId> {
+        let view = self.view();
+        let mut c: Vec<ObjectId> = self
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|id| view.controller(*id) == Some(p))
+            .filter(|id| matches_filter(self, f, *id, &view.chars, Some(source), p))
+            .collect();
+        c.sort_by_key(|id| {
+            let o = &self.objects[id];
+            (!o.is_token, o.def.mana_cost.mana_value(), *id == source)
+        });
+        c.truncate(n as usize);
+        c
+    }
+
     fn put_onto_battlefield(&mut self, id: ObjectId, controller: PlayerId, tapped: bool) {
         if let Some(new) = self.move_object(id, Zone::Battlefield, Some(controller)) {
             if tapped {
@@ -1967,6 +2111,56 @@ impl Game {
         }
     }
 
+    /// "When ~ leaves the battlefield" triggers of an object that just left (CR 603.10a).
+    fn fire_leaves(&mut self, lki: &Characteristics, new: ObjectId) {
+        for a in &lki.abilities {
+            if let Ability::Triggered {
+                event: TriggerEvent::LeavesBattlefield(f),
+                ..
+            } = &a.ability
+            {
+                if f.this_object {
+                    self.pending_triggers.push(PendingTrigger {
+                        controller: lki.controller,
+                        source: new,
+                        source_name: lki.name.clone(),
+                        ability: a.ability.clone(),
+                        subject: Some(Target::Object(new)),
+                    });
+                }
+            }
+        }
+    }
+
+    fn gain_life(&mut self, p: PlayerId, n: i32) {
+        if n <= 0 || !self.in_game(p) {
+            return;
+        }
+        self.player_mut(p).life += n;
+        self.fire(Event::GainedLife(p));
+    }
+
+    /// Use a regeneration shield instead of being destroyed (701.19b): tap it, remove its
+    /// damage and take it out of combat. Returns whether it regenerated.
+    fn regenerate(&mut self, id: ObjectId) -> bool {
+        let Some(o) = self.object_mut(id) else {
+            return false;
+        };
+        if o.regen_shields == 0 {
+            return false;
+        }
+        o.regen_shields -= 1;
+        o.tapped = true;
+        o.damage = 0;
+        o.damaged_by_deathtouch = false;
+        self.combat.attackers.retain(|(a, _)| *a != id);
+        self.combat.blockers.retain(|(b, _)| *b != id);
+        self.version += 1;
+        let name = self.objects[&id].def.name.clone();
+        self.log(format!("{name} regenerates."));
+        true
+    }
+
     /// 701.8: destroy, respecting indestructible.
     fn destroy(&mut self, id: ObjectId) {
         if !self.is_on_battlefield(id) {
@@ -1977,6 +2171,9 @@ impl Game {
             .get(id)
             .is_some_and(|c| c.has_keyword(Keyword::Indestructible))
         {
+            return;
+        }
+        if self.regenerate(id) {
             return;
         }
         self.leave_battlefield_to(id, Zone::Graveyard);
@@ -2000,6 +2197,9 @@ impl Game {
             if let (Some(new), Some(l)) = (self.move_object(*id, zone, None), lki) {
                 left.push((new, l));
             }
+        }
+        for (new, l) in &left {
+            self.fire_leaves(l, *new);
         }
         if zone != Zone::Graveyard {
             return;
@@ -2058,6 +2258,13 @@ impl Game {
                 let Some(c) = view.get(id).cloned() else {
                     return;
                 };
+                // 702.16e: damage from a source of a protected color is prevented.
+                if src
+                    .as_ref()
+                    .is_some_and(|s| s.colors.iter().any(|col| c.protected_from().contains(col)))
+                {
+                    return;
+                }
                 if c.has_type(CardType::Planeswalker) && !c.is_creature() {
                     let o = self.object_mut(id).unwrap();
                     let cur = o.counters.get(&CounterKind::Loyalty).copied().unwrap_or(0);
@@ -2074,7 +2281,7 @@ impl Game {
         }
         if lifelink {
             if let Some(c) = src {
-                self.player_mut(c.controller).life += n;
+                self.gain_life(c.controller, n);
             }
         }
     }
@@ -2212,6 +2419,10 @@ impl Game {
         }
         // 704.3: all applicable SBAs happen simultaneously.
         let mut dying: Vec<ObjectId> = to_graveyard;
+        let to_destroy: Vec<ObjectId> = to_destroy
+            .into_iter()
+            .filter(|id| !self.regenerate(*id))
+            .collect();
         dying.extend(to_destroy);
         dying.sort();
         dying.dedup();
@@ -2371,6 +2582,21 @@ impl Game {
                         TriggerEvent::DealsCombatDamageToPlayer(f),
                         Event::CombatDamageToPlayer { source, player },
                     ) => (hit(f, *source, &view.chars), Some(Target::Player(*player))),
+                    (TriggerEvent::YouGainLife, Event::GainedLife(p)) => {
+                        (*p == you, Some(Target::Player(*p)))
+                    }
+                    (TriggerEvent::BeginningOfCombat(w), Event::BeginCombat(p))
+                    | (TriggerEvent::BeginningOfFirstMain(w), Event::FirstMain(p)) => {
+                        (player_matches(*w, you, *p), Some(Target::Player(*p)))
+                    }
+                    (TriggerEvent::YouAttack, Event::AttackersDeclared(p)) => {
+                        (*p == you, Some(Target::Player(*p)))
+                    }
+                    (TriggerEvent::PlayerCastsSpell(w, f), Event::Cast { player, spell }) => (
+                        player_matches(*w, you, *player)
+                            && matches_filter_any_zone(game, f, *spell, &view, None, you),
+                        Some(Target::Object(*spell)),
+                    ),
                     _ => (false, None),
                 };
                 if matched {
@@ -2429,7 +2655,17 @@ impl Game {
                         ..
                     } = &a.ability
                     {
-                        if f.this_object {
+                        // "Whenever a creature you control dies" on a creature sees itself die too.
+                        if f.this_object
+                            || matches_filter(
+                                self,
+                                f,
+                                *source,
+                                &lookback,
+                                Some(*source),
+                                lki.controller,
+                            )
+                        {
                             found.push(PendingTrigger {
                                 controller: lki.controller,
                                 source: *source,
@@ -2484,6 +2720,26 @@ impl Game {
                         consider(self, id, ch);
                     }
                 }
+                // "When you cast ~": the spell's own ability, while it's on the stack.
+                if let Event::Cast { spell, .. } = &ev {
+                    if let Some(ch) = view.get(*spell) {
+                        for a in &ch.abilities {
+                            if let Ability::Triggered {
+                                event: TriggerEvent::CastThis,
+                                ..
+                            } = &a.ability
+                            {
+                                found.push(PendingTrigger {
+                                    controller: ch.controller,
+                                    source: *spell,
+                                    source_name: ch.name.clone(),
+                                    ability: a.ability.clone(),
+                                    subject: Some(Target::Object(*spell)),
+                                });
+                            }
+                        }
+                    }
+                }
             }
         }
         self.pending_triggers.extend(found);
@@ -2535,6 +2791,7 @@ impl Game {
             self.skip_to(Step::EndCombat);
             return Ok(());
         }
+        self.fire(Event::AttackersDeclared(p));
         for (a, _) in &attacks {
             self.fire(Event::Attacked(*a));
         }
@@ -2570,20 +2827,21 @@ impl Game {
             let Some(ac) = view.get(*a) else {
                 return illegal("no such attacker");
             };
-            if !evasion_allows_block(ac, bc) {
-                return illegal(if bc.has_keyword(Keyword::CantBlock) {
-                    "that creature can't block"
-                } else if ac.has_keyword(Keyword::CantBeBlocked) {
-                    "that creature can't be blocked"
-                } else {
-                    "creatures with flying can only be blocked by flying or reach (702.9b)"
-                });
+            if let Some(why) = self.block_problem(&view, ac, bc) {
+                return illegal(why);
             }
         }
         for (a, _) in self.combat.attackers.iter().filter(|(_, d)| *d == p) {
             let n = blocks.iter().filter(|(_, x)| x == a).count();
             if n == 1 && view.get(*a).is_some_and(|c| c.has_keyword(Keyword::Menace)) {
                 return illegal("menace: needs two or more blockers (702.111b)");
+            }
+            if n > 1
+                && view
+                    .get(*a)
+                    .is_some_and(|c| c.has_keyword(Keyword::CantBeBlockedByMoreThanOne))
+            {
+                return illegal("that creature can't be blocked by more than one creature");
             }
         }
         for (b, a) in &blocks {
@@ -2607,9 +2865,89 @@ impl Game {
         self.combat
             .attackers
             .iter()
-            .filter(|(a, d)| *d == p && view.get(*a).is_some_and(|ac| evasion_allows_block(ac, bc)))
+            .filter(|(a, d)| {
+                *d == p
+                    && view
+                        .get(*a)
+                        .is_some_and(|ac| self.block_problem(&view, ac, bc).is_none())
+            })
             .map(|(a, _)| *a)
             .collect()
+    }
+
+    /// Why `blocker` can't block `attacker` (evasion, protection, restrictions), if it can't.
+    fn block_problem(
+        &self,
+        view: &View,
+        attacker: &Characteristics,
+        blocker: &Characteristics,
+    ) -> Option<&'static str> {
+        let a = |k| attacker.has_keyword(k);
+        let b = |k| blocker.has_keyword(k);
+        if b(Keyword::CantBlock) {
+            return Some("that creature can't block");
+        }
+        if a(Keyword::CantBeBlocked) {
+            return Some("that creature can't be blocked");
+        }
+        if a(Keyword::Flying) && !b(Keyword::Flying) && !b(Keyword::Reach) {
+            return Some("creatures with flying can only be blocked by flying or reach (702.9b)");
+        }
+        if b(Keyword::CanBlockOnlyFlyers) && !a(Keyword::Flying) {
+            return Some("that creature can block only creatures with flying");
+        }
+        if a(Keyword::Fear)
+            && !blocker.has_type(CardType::Artifact)
+            && !blocker.colors.contains(Color::Black)
+        {
+            return Some("fear: only artifact or black creatures can block it (702.36b)");
+        }
+        if a(Keyword::Intimidate)
+            && !blocker.has_type(CardType::Artifact)
+            && !attacker.colors.iter().any(|c| blocker.colors.contains(c))
+        {
+            return Some("intimidate: only artifact creatures or ones sharing a color can block it (702.13b)");
+        }
+        if a(Keyword::Shadow) != b(Keyword::Shadow) {
+            return Some(
+                "shadow: creatures with shadow block and are blocked only by shadow (702.28b)",
+            );
+        }
+        if a(Keyword::Horsemanship) && !b(Keyword::Horsemanship) {
+            return Some("horsemanship: only creatures with horsemanship can block it (702.31b)");
+        }
+        if a(Keyword::Skulk) && blocker.power.unwrap_or(0) > attacker.power.unwrap_or(0) {
+            return Some("skulk: creatures with greater power can't block it (702.118b)");
+        }
+        for (k, land) in [
+            (Keyword::Plainswalk, "Plains"),
+            (Keyword::Islandwalk, "Island"),
+            (Keyword::Swampwalk, "Swamp"),
+            (Keyword::Mountainwalk, "Mountain"),
+            (Keyword::Forestwalk, "Forest"),
+        ] {
+            if a(k)
+                && self.battlefield.iter().any(|id| {
+                    view.get(*id).is_some_and(|c| {
+                        c.controller == blocker.controller
+                            && c.has_type(CardType::Land)
+                            && c.has_subtype(land)
+                    })
+                })
+            {
+                return Some(
+                    "landwalk: it can't be blocked while you control that land type (702.14c)",
+                );
+            }
+        }
+        if blocker
+            .colors
+            .iter()
+            .any(|c| attacker.protected_from().contains(c))
+        {
+            return Some("protection: it can't be blocked by creatures of that color (702.16e)");
+        }
+        None
     }
 
     fn combat_creatures(&self) -> Vec<ObjectId> {

@@ -73,6 +73,9 @@ pub fn describe_effect(e: &Effect) -> String {
         }
         Effect::Discard { who: w, amount } => format!("{} discard {}", who(w), amt(amount)),
         Effect::Fight { .. } => "Fight target creature".into(),
+        Effect::Regenerate { .. } => "Regenerate".into(),
+        Effect::ReturnThisToHand => "Return this to its owner's hand".into(),
+        Effect::UntapThis => "Untap this".into(),
         Effect::ControllerOfTargetGainsLifeEqualToPower { .. } => {
             "Its controller gains life equal to its power".into()
         }
@@ -99,6 +102,33 @@ fn cost(c: &Cost) -> String {
     }
     if c.pay_life > 0 {
         parts.push(format!("Pay {} life", c.pay_life));
+    }
+    if c.discard_this {
+        parts.push("Discard this card".into());
+    }
+    if c.discard > 0 {
+        parts.push(match c.discard {
+            1 => "Discard a card".into(),
+            n => format!("Discard {n} cards"),
+        });
+    }
+    if let Some((_, n)) = &c.sacrifice {
+        parts.push(match n {
+            1 => "Sacrifice a permanent".into(),
+            n => format!("Sacrifice {n} permanents"),
+        });
+    }
+    if let Some((k, n)) = &c.remove_counters {
+        let k = match k {
+            CounterKind::PlusOnePlusOne => "+1/+1".to_string(),
+            CounterKind::MinusOneMinusOne => "-1/-1".into(),
+            CounterKind::Loyalty => "loyalty".into(),
+            CounterKind::Other(s) => s.clone(),
+        };
+        parts.push(format!(
+            "Remove {n} {k} counter{}",
+            if *n == 1 { "" } else { "s" }
+        ));
     }
     if let Some(l) = c.loyalty {
         parts.push(if l > 0 {
@@ -135,6 +165,7 @@ pub fn describe_ability(a: &Ability) -> String {
             format!("Enters with {} +1/+1 counter(s)", amt(amount))
         }
         Ability::NoMaxHandSize => "No maximum hand size".into(),
+        Ability::EntersTappedUnless(_) => "Enters tapped unless a condition is met".into(),
         Ability::Unsupported(t) => t.clone(),
     }
 }
