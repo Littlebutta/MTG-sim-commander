@@ -418,6 +418,14 @@ impl Brain {
 
         let mut opts: Vec<Option_> = Vec::new();
         let window = self.instant_window(g);
+        let ways = g.cast_ways(me);
+        for id in g.can_turn_face_up(me) {
+            let action = Action::TurnFaceUp(id);
+            if let Some(sim) = sim::try_action(g, me, action.clone()) {
+                let score = self.score(&sim);
+                opts.push(Option_ { action, score });
+            }
+        }
         for card in g.castable(me) {
             let o = g.object(card).unwrap();
             let def = o.def.clone();
@@ -452,21 +460,38 @@ impl Brain {
             } else {
                 0.0
             };
-            for x in xs {
-                for mode in def.mode_choices() {
-                    let Some((specs, _)) = def.spell_parts(mode) else {
-                        continue;
+            for way in ways.iter().filter(|(c, _)| *c == card).map(|(_, w)| *w) {
+                if way.face_down {
+                    let action = Action::Cast {
+                        card,
+                        targets: vec![],
+                        x: 0,
+                        mode: None,
+                        opts: way,
                     };
-                    for targets in self.target_combos(g, Some(card), specs) {
-                        let action = Action::Cast {
-                            card,
-                            targets,
-                            x,
-                            mode,
+                    if let Some(sim) = sim::try_action(g, me, action.clone()) {
+                        let score = self.score(&sim) - penalty;
+                        opts.push(Option_ { action, score });
+                    }
+                    continue;
+                }
+                for &x in &xs {
+                    for mode in def.mode_choices() {
+                        let Some((specs, _)) = def.spell_parts(mode) else {
+                            continue;
                         };
-                        if let Some(sim) = sim::try_action(g, me, action.clone()) {
-                            let score = self.score(&sim) - penalty;
-                            opts.push(Option_ { action, score });
+                        for targets in self.target_combos(g, Some(card), specs) {
+                            let action = Action::Cast {
+                                card,
+                                targets,
+                                x,
+                                mode,
+                                opts: way,
+                            };
+                            if let Some(sim) = sim::try_action(g, me, action.clone()) {
+                                let score = self.score(&sim) - penalty;
+                                opts.push(Option_ { action, score });
+                            }
                         }
                     }
                 }

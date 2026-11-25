@@ -66,6 +66,13 @@ pub fn script(def: &mut CardDef, name: &str, text: &str) {
                 def.abilities.push(a);
                 continue;
             }
+            if let Some(mut a) = parse_keyword_ability(&lower).or_else(|| parse_keyword_line(line))
+            {
+                if !a.iter().any(|x| matches!(x, Ability::Unsupported(_))) {
+                    def.abilities.append(&mut a);
+                    continue;
+                }
+            }
             match parse_effects(line, &mut spell_targets) {
                 Some(mut es) => spell_effects.append(&mut es),
                 None => {
@@ -257,6 +264,22 @@ fn parse_ability_line(line: &str) -> Option<Vec<Ability>> {
     if let Some(a) = parse_cycling(&l) {
         return Some(vec![a]);
     }
+    if let Some(a) = parse_keyword_ability(&l) {
+        return Some(a);
+    }
+    // "{2}{B}: Return ~ from your graveyard to your hand."
+    if let Some((c, e)) = l.split_once(": ") {
+        if e.trim_end_matches('.') == "return ~ from your graveyard to your hand" {
+            let mut cost = parse_cost(c)?;
+            cost.from_graveyard = true;
+            return Some(vec![Ability::Activated {
+                cost,
+                targets: vec![],
+                effects: vec![Effect::ReturnThisToHand],
+                sorcery_speed: false,
+            }]);
+        }
+    }
     // "Equip {2}" (CR 702.6a): attach to target creature you control, as a sorcery.
     if let Some(c) = l.strip_prefix("equip ").filter(|c| c.starts_with('{')) {
         return Some(vec![Ability::Activated {
@@ -299,6 +322,117 @@ fn parse_ability_line(line: &str) -> Option<Vec<Ability>> {
 }
 
 /// Rules about the card itself: "~ can't block", "~ enters tapped", "~ can't be countered".
+/// Keyword abilities with a cost or number: "Flashback {2}{R}", "Kicker {1}{G}", "Crew 3",
+/// "Ward {2}", "Morph {4}{U}", "Unearth {B}", "Bushido 2", "Affinity for artifacts".
+fn parse_keyword_ability(l: &str) -> Option<Vec<Ability>> {
+    let l = l.trim().trim_end_matches('.');
+    let mana = |rest: &str| -> Option<ManaCost> {
+        if rest.starts_with('{') && !rest.contains(' ') {
+            ManaCost::parse(rest).ok()
+        } else {
+            None
+        }
+    };
+    let (kw, rest) = l.split_once(' ').unwrap_or((l, ""));
+    let one = |a: Ability| Some(vec![a]);
+    match kw {
+        "flashback" => one(Ability::Flashback(mana(rest)?)),
+        "kicker" => one(Ability::Kicker(mana(rest)?)),
+        "buyback" => one(Ability::Buyback(mana(rest)?)),
+        "echo" => one(Ability::Echo(mana(rest)?)),
+        "evoke" => one(Ability::Evoke(mana(rest)?)),
+        "toxic" => one(Ability::Toxic(rest.parse().ok()?)),
+        "morph" | "megamorph" | "disguise" => one(Ability::Morph {
+            cost: mana(rest)?,
+            megamorph: kw == "megamorph",
+            disguise: kw == "disguise",
+        }),
+        "ward" => {
+            let cost = if let Some(m) = mana(rest) {
+                WardCost::Mana(m)
+            } else if let Some(n) = l
+                .strip_prefix("ward—pay ")
+                .and_then(|r| r.strip_suffix(" life"))
+            {
+                WardCost::Life(n.parse().ok()?)
+            } else if l == "ward—discard a card" {
+                WardCost::Discard
+            } else {
+                return None;
+            };
+            one(Ability::Ward(cost))
+        }
+        _ if l.starts_with("ward—") => {
+            let cost = if let Some(n) = l
+                .strip_prefix("ward—pay ")
+                .and_then(|r| r.strip_suffix(" life"))
+            {
+                WardCost::Life(n.parse().ok()?)
+            } else if l == "ward—discard a card" {
+                WardCost::Discard
+            } else {
+                return None;
+            };
+            one(Ability::Ward(cost))
+        }
+        "crew" => {
+            let n: u32 = rest.parse().ok()?;
+            one(Ability::Activated {
+                cost: Cost {
+                    crew: Some(n),
+                    ..Default::default()
+                },
+                targets: vec![],
+                effects: vec![Effect::ApplyContinuous {
+                    affected: Affected::ThisObject,
+                    mods: vec![Modification::AddTypes(vec![
+                        CardType::Artifact,
+                        CardType::Creature,
+                    ])],
+                    duration: Duration::EndOfTurn,
+                }],
+                sorcery_speed: false,
+            })
+        }
+        "unearth" => one(Ability::Activated {
+            cost: Cost {
+                mana: mana(rest)?,
+                from_graveyard: true,
+                ..Default::default()
+            },
+            targets: vec![],
+            effects: vec![Effect::Unearth],
+            sorcery_speed: true,
+        }),
+        "bushido" => {
+            let n: i32 = rest.parse().ok()?;
+            let pump = vec![Effect::ApplyContinuous {
+                affected: Affected::ThisObject,
+                mods: vec![Modification::ModifyPT(n, n)],
+                duration: Duration::EndOfTurn,
+            }];
+            Some(
+                [
+                    TriggerEvent::Blocks(Filter::this()),
+                    TriggerEvent::BecomesBlocked(Filter::this()),
+                ]
+                .into_iter()
+                .map(|event| Ability::Triggered {
+                    event,
+                    targets: vec![],
+                    effects: pump.clone(),
+                    optional: false,
+                })
+                .collect(),
+            )
+        }
+        "affinity" if rest == "for artifacts" => one(Ability::CostReduction(
+            Amount::CountPermanents(Filter::of_type(CardType::Artifact).yours()),
+        )),
+        _ => None,
+    }
+}
+
 fn parse_self_rule(l: &str) -> Option<Ability> {
     let l = l.trim_end_matches('.');
     Some(match l {
@@ -313,6 +447,41 @@ fn parse_self_rule(l: &str) -> Option<Ability> {
             Ability::Keyword(Keyword::CantBeBlockedByMoreThanOne)
         }
         "~ doesn't untap during your untap step" => Ability::Keyword(Keyword::DoesntUntap),
+        "~ attacks each combat if able" => Ability::Keyword(Keyword::AttacksEachCombat),
+        _ if l.starts_with("as ~ enters, you may pay ")
+            && l.ends_with(" life. if you don't, it enters tapped") =>
+        {
+            let n = l["as ~ enters, you may pay ".len()..].split(' ').next()?;
+            Ability::EntersTappedUnlessPayLife(n.parse().ok()?)
+        }
+        _ if l.starts_with("~ can't be blocked by creatures with power ")
+            && l.ends_with(" or less") =>
+        {
+            let n = &l["~ can't be blocked by creatures with power ".len()..l.len() - 8];
+            Ability::CantBeBlockedByPowerAtMost(n.parse().ok()?)
+        }
+        _ if l.starts_with("if ~ was kicked, it enters with ") => {
+            let rest = &l["if ~ was kicked, it enters with ".len()..];
+            let (n, rest) = rest.split_once(' ')?;
+            if !matches!(rest, "+1/+1 counter on it" | "+1/+1 counters on it") {
+                return None;
+            }
+            Ability::EntersWithCountersIfKicked {
+                kind: CounterKind::PlusOnePlusOne,
+                amount: number(n)? as u32,
+            }
+        }
+        _ if l.starts_with("as an additional cost to cast ~, ")
+            || l.starts_with("as an additional cost to cast this spell, ") =>
+        {
+            let (_, what) = l.split_once(", ")?;
+            let mut cost = parse_cost(what)?;
+            if cost.tap || !cost.mana.0.is_empty() || cost.sacrifice_this {
+                return None;
+            }
+            cost.once_per_turn = false;
+            Ability::AdditionalCost(cost)
+        }
         _ if l.starts_with("~ enters tapped unless ") => {
             Ability::EntersTappedUnless(entry_condition(&l["~ enters tapped unless ".len()..])?)
         }
@@ -578,6 +747,29 @@ fn trigger_prefix(l: &str) -> Option<(Vec<TriggerEvent>, &str)> {
             vec![TriggerEvent::LeavesBattlefield(Filter::this())],
         ),
         ("whenever you attack, ", vec![TriggerEvent::YouAttack]),
+        (
+            "when ~ is turned face up, ",
+            vec![TriggerEvent::TurnedFaceUp],
+        ),
+        (
+            "whenever ~ blocks, ",
+            vec![TriggerEvent::Blocks(Filter::this())],
+        ),
+        (
+            "whenever ~ becomes blocked, ",
+            vec![TriggerEvent::BecomesBlocked(Filter::this())],
+        ),
+        (
+            "whenever ~ blocks or becomes blocked, ",
+            vec![
+                TriggerEvent::Blocks(Filter::this()),
+                TriggerEvent::BecomesBlocked(Filter::this()),
+            ],
+        ),
+        (
+            "whenever a creature you control becomes blocked, ",
+            vec![TriggerEvent::BecomesBlocked(Filter::creatures().yours())],
+        ),
         ("when you cast ~, ", vec![TriggerEvent::CastThis]),
         ("when you cast this spell, ", vec![TriggerEvent::CastThis]),
         (
@@ -777,9 +969,16 @@ fn parse_keyword_line(line: &str) -> Option<Vec<Ability>> {
         .map(str::trim)
         .filter(|p| !p.is_empty())
         .collect();
-    let known: Vec<Option<Keyword>> = parts.iter().map(|p| Keyword::parse(p)).collect();
+    let known: Vec<Option<Vec<Ability>>> = parts
+        .iter()
+        .map(|p| {
+            Keyword::parse(p)
+                .map(|k| vec![Ability::Keyword(k)])
+                .or_else(|| parse_keyword_ability(&p.to_lowercase()))
+        })
+        .collect();
     if known.iter().all(Option::is_some) {
-        return Some(known.into_iter().flatten().map(Ability::Keyword).collect());
+        return Some(known.into_iter().flatten().flatten().collect());
     }
     // A keyword list with one we don't know ("Flying, ward {2}"): keep the ones we do, so the
     // creature doesn't lose flying along with the rest, and flag only the unknown part.
@@ -794,9 +993,9 @@ fn parse_keyword_line(line: &str) -> Option<Vec<Ability>> {
         parts
             .iter()
             .zip(known)
-            .map(|(p, k)| match k {
-                Some(k) => Ability::Keyword(k),
-                None => Ability::Unsupported(capitalize(p)),
+            .flat_map(|(p, k)| match k {
+                Some(k) => k,
+                None => vec![Ability::Unsupported(capitalize(p))],
             })
             .collect(),
     )
@@ -1400,11 +1599,66 @@ fn push_target(targets: &mut Vec<TargetSpec>, phrase: &str) -> Option<usize> {
 pub fn parse_effects(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Vec<Effect>> {
     let s = s.to_lowercase();
     let mut out = Vec::new();
+    let mut sentence_start = 0;
     for sentence in s
         .split(". ")
         .map(|x| x.trim().trim_end_matches('.'))
         .filter(|x| !x.is_empty())
     {
+        // Kicker: "If this spell was kicked, ..." and "... If it was kicked, X instead."
+        if let Some(rest) = sentence
+            .strip_prefix("if ~ was kicked, ")
+            .or_else(|| sentence.strip_prefix("if this spell was kicked, "))
+            .or_else(|| sentence.strip_prefix("if it was kicked, "))
+        {
+            if let Some(rest) = rest.strip_suffix(" instead") {
+                let otherwise: Vec<Effect> = out.drain(sentence_start..).collect();
+                let then =
+                    parse_effects(rest, targets).or_else(|| instead_damage(rest, &otherwise))?;
+                out.push(Effect::IfKicked { then, otherwise });
+            } else {
+                let then = parse_effects(rest, targets)?;
+                out.push(Effect::IfKicked {
+                    then,
+                    otherwise: vec![],
+                });
+            }
+            continue;
+        }
+        sentence_start = out.len();
+        match sentence {
+            "you become the monarch" => {
+                out.push(Effect::BecomeMonarch);
+                continue;
+            }
+            "draw a card at the beginning of the next turn's upkeep" => {
+                out.push(Effect::DrawAtNextUpkeep);
+                continue;
+            }
+            "exile ~" => {
+                out.push(Effect::ExileThis);
+                continue;
+            }
+            _ => {}
+        }
+        if let Some(m) = sentence
+            .strip_prefix("sacrifice ~ unless you pay ")
+            .and_then(|m| ManaCost::parse(m).ok())
+        {
+            out.push(Effect::SacrificeThisUnlessPay(m));
+            continue;
+        }
+        if let Some(m) = sentence
+            .strip_prefix("counter target spell unless its controller pays ")
+            .and_then(|m| ManaCost::parse(m).ok())
+        {
+            targets.push(TargetSpec::Spell(Filter::default()));
+            out.push(Effect::CounterUnlessPays {
+                target: targets.len() - 1,
+                mana: m,
+            });
+            continue;
+        }
         // The engine has no regeneration, so "can't be regenerated" never changes anything.
         if matches!(
             sentence,
@@ -1440,6 +1694,25 @@ pub fn parse_effects(s: &str, targets: &mut Vec<TargetSpec>) -> Option<Vec<Effec
         None
     } else {
         Some(out)
+    }
+}
+
+/// "~ deals 2 damage to any target. If this spell was kicked, it deals 5 damage instead."
+fn instead_damage(rest: &str, otherwise: &[Effect]) -> Option<Vec<Effect>> {
+    let n = rest
+        .strip_prefix("it deals ")
+        .or_else(|| rest.strip_prefix("~ deals "))?;
+    let (n, tail) = n.split_once(" damage")?;
+    if !(tail.is_empty() || tail.starts_with(" to that ") || tail.starts_with(" to it")) {
+        return None;
+    }
+    let n = number(n)?;
+    match otherwise {
+        [Effect::DealDamage { target, .. }] => Some(vec![Effect::DealDamage {
+            target: *target,
+            amount: Amount::Fixed(n),
+        }]),
+        _ => None,
     }
 }
 
@@ -2146,8 +2419,8 @@ mod tests {
     #[test]
     fn a_keyword_list_with_an_unknown_keyword_keeps_the_known_ones() {
         for text in [
-            "Flying, ward {2}",
-            "Flying; protection from artifacts",
+            "Flying, ward—sacrifice a creature",
+            "Flying; protection from everything",
             "Flying, first strike, landwalk",
         ] {
             let d = def("Test Drake", &[CardType::Creature], text);

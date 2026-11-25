@@ -467,7 +467,8 @@ fn modal_spells_do_the_chosen_mode() {
                 card: charm,
                 targets: vec![Target::Object(bear)],
                 x: 0,
-                mode: None
+                mode: None,
+                opts: Default::default(),
             }
         )
         .is_err());
@@ -478,7 +479,8 @@ fn modal_spells_do_the_chosen_mode() {
                 card: charm,
                 targets: vec![Target::Object(bear)],
                 x: 0,
-                mode: Some(0)
+                mode: Some(0),
+                opts: Default::default(),
             }
         )
         .is_err());
@@ -489,6 +491,7 @@ fn modal_spells_do_the_chosen_mode() {
             targets: vec![Target::Object(bear)],
             x: 0,
             mode: Some(1),
+            opts: Default::default(),
         },
     )
     .unwrap();
@@ -557,7 +560,8 @@ fn protection_stops_targeting_and_damage_and_landwalk_stops_blocks() {
                 card: b,
                 targets: vec![Target::Object(knight)],
                 x: 0,
-                mode: None
+                mode: None,
+                opts: Default::default(),
             }
         )
         .is_err());
@@ -659,4 +663,381 @@ fn cast_and_combat_triggers_and_sacrifice_costs() {
         .any(|id| g.object(*id).unwrap().def.name == "Cast Seer"));
     pass_until(&mut g, Step::BeginCombat);
     assert_eq!(g.player(P0).life, life + 3);
+}
+
+/// Resolve the stack, including triggers waiting to be put on it.
+fn settle(g: &mut Game) {
+    for _ in 0..1000 {
+        if g.stack.is_empty() && !matches!(g.decision(), Decision::PutTriggersOnStack { .. }) {
+            return;
+        }
+        default_answer(g);
+    }
+    panic!("never settled");
+}
+
+fn cast_with(g: &mut Game, p: PlayerId, card: ObjectId, targets: Vec<Target>, opts: CastOptions) {
+    g.submit(
+        p,
+        Action::Cast {
+            card,
+            targets,
+            x: 0,
+            mode: None,
+            opts,
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn flashback_casts_from_the_graveyard_and_exiles_it() {
+    let mut g = game(2);
+    let life = g.player(P1).life;
+    let spell = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Flare",
+            "{R}",
+            &[CardType::Sorcery],
+            &[],
+            "Test Flare deals 2 damage to any target.\nFlashback {1}{R}",
+        ),
+    );
+    add_mana(&mut g, P0, "R");
+    cast(&mut g, P0, spell, vec![Target::Player(P1)]);
+    resolve_all(&mut g);
+    let in_yard = *g.player(P0).graveyard.last().unwrap();
+    assert_eq!(g.object(in_yard).unwrap().def.name, "Test Flare");
+    assert!(g.castable(P0).is_empty());
+    add_mana(&mut g, P0, "RR");
+    assert!(g.castable(P0).contains(&in_yard));
+    cast(&mut g, P0, in_yard, vec![Target::Player(P1)]);
+    resolve_all(&mut g);
+    assert_eq!(g.player(P1).life, life - 4);
+    assert!(g
+        .exile
+        .iter()
+        .any(|id| g.object(*id).unwrap().def.name == "Test Flare"));
+}
+
+#[test]
+fn kicker_costs_more_and_does_more() {
+    let mut g = game(2);
+    let life = g.player(P1).life;
+    let text = "Kicker {2}\nTest Bolt deals 2 damage to any target. If this spell was kicked, it deals 5 damage instead.";
+    let a = in_hand(
+        &mut g,
+        P0,
+        card("Test Bolt", "{R}", &[CardType::Instant], &[], text),
+    );
+    add_mana(&mut g, P0, "R");
+    // Can't afford the kicker with one mana.
+    assert!(!g.cast_ways(P0).contains(&(
+        a,
+        CastOptions {
+            kicked: true,
+            ..Default::default()
+        }
+    )));
+    cast(&mut g, P0, a, vec![Target::Player(P1)]);
+    resolve_all(&mut g);
+    assert_eq!(g.player(P1).life, life - 2);
+    let b = in_hand(
+        &mut g,
+        P0,
+        card("Test Bolt", "{R}", &[CardType::Instant], &[], text),
+    );
+    add_mana(&mut g, P0, "RCC");
+    cast_with(
+        &mut g,
+        P0,
+        b,
+        vec![Target::Player(P1)],
+        CastOptions {
+            kicked: true,
+            ..Default::default()
+        },
+    );
+    resolve_all(&mut g);
+    assert_eq!(g.player(P1).life, life - 7);
+
+    // "If it was kicked, it enters with counters."
+    let c = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Kavu",
+            "{G}",
+            &[CardType::Creature],
+            &[],
+            "Kicker {1}\nIf Test Kavu was kicked, it enters with two +1/+1 counters on it.",
+        ),
+    );
+    add_mana(&mut g, P0, "GC");
+    cast_with(
+        &mut g,
+        P0,
+        c,
+        vec![],
+        CastOptions {
+            kicked: true,
+            ..Default::default()
+        },
+    );
+    resolve_all(&mut g);
+    assert_eq!(pt(&g, find(&g, "Test Kavu")), (4, 4));
+}
+
+#[test]
+fn crew_turns_a_vehicle_into_a_creature() {
+    let mut g = game(2);
+    let mut d = (*card(
+        "Test Cart",
+        "{2}",
+        &[CardType::Artifact],
+        &["Vehicle"],
+        "Trample\nCrew 2",
+    ))
+    .clone();
+    d.power = Some(4);
+    d.toughness = Some(4);
+    let cart = put(&mut g, P0, Arc::new(d));
+    assert!(!g.chars(cart).unwrap().is_creature());
+    // A 1/1 alone can't crew 2.
+    let small = put(&mut g, P0, vanilla("Squire", 1, 1));
+    assert!(g.activatable(P0).iter().all(|(o, _)| *o != cart));
+    let bear = put(&mut g, P0, bears());
+    let ability = g
+        .activatable(P0)
+        .iter()
+        .find(|(o, _)| *o == cart)
+        .unwrap()
+        .1;
+    g.submit(
+        P0,
+        Action::Activate {
+            object: cart,
+            ability,
+            targets: vec![],
+            x: 0,
+        },
+    )
+    .unwrap();
+    resolve_all(&mut g);
+    assert!(g.chars(cart).unwrap().is_creature());
+    assert_eq!(pt(&g, cart), (4, 4));
+    // The bear (just enough power) tapped, the squire didn't.
+    assert!(g.object(bear).unwrap().tapped);
+    assert!(!g.object(small).unwrap().tapped);
+}
+
+#[test]
+fn ward_counters_unless_paid() {
+    let mut g = game(2);
+    let warded = put(
+        &mut g,
+        P1,
+        card(
+            "Warded Bear",
+            "{1}{G}",
+            &[CardType::Creature],
+            &[],
+            "Ward {2}",
+        ),
+    );
+    // No mana left over to pay ward: the bolt is countered.
+    let b = in_hand(&mut g, P0, bolt());
+    add_mana(&mut g, P0, "R");
+    cast(&mut g, P0, b, vec![Target::Object(warded)]);
+    resolve_all(&mut g);
+    assert!(g.battlefield.contains(&warded));
+    // With two more mana it gets paid.
+    let b = in_hand(&mut g, P0, bolt());
+    add_mana(&mut g, P0, "RCC");
+    cast(&mut g, P0, b, vec![Target::Object(warded)]);
+    resolve_all(&mut g);
+    assert!(!g.battlefield.contains(&warded));
+}
+
+#[test]
+fn morph_is_a_hidden_two_two_until_turned_face_up() {
+    let mut g = game(2);
+    let m = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Morph",
+            "{4}{G}{G}",
+            &[CardType::Creature],
+            &["Beast"],
+            "Trample\nMorph {2}{G}\nWhen Test Morph is turned face up, you gain 3 life.",
+        ),
+    );
+    add_mana(&mut g, P0, "CCC");
+    // Only the face-down way is affordable.
+    assert_eq!(
+        g.cast_ways(P0)
+            .iter()
+            .filter(|(c, _)| *c == m)
+            .map(|(_, o)| o.face_down)
+            .collect::<Vec<_>>(),
+        vec![true]
+    );
+    cast_with(
+        &mut g,
+        P0,
+        m,
+        vec![],
+        CastOptions {
+            face_down: true,
+            ..Default::default()
+        },
+    );
+    resolve_all(&mut g);
+    let id = *g
+        .battlefield
+        .iter()
+        .find(|id| g.object(**id).unwrap().face_down)
+        .unwrap();
+    let ch = g.chars(id).unwrap();
+    assert_eq!(
+        (ch.power, ch.toughness, ch.name.as_str()),
+        (Some(2), Some(2), "")
+    );
+    assert!(!ch.has_keyword(Keyword::Trample));
+    assert!(!g.log.iter().any(|l| l.contains("Test Morph")));
+    let life = g.player(P0).life;
+    add_mana(&mut g, P0, "GCC");
+    g.submit(P0, Action::TurnFaceUp(id)).unwrap();
+    resolve_all(&mut g);
+    assert_eq!(pt(&g, id), (2, 2)); // the card() helper's 2/2
+    assert!(g.chars(id).unwrap().has_keyword(Keyword::Trample));
+    assert_eq!(g.player(P0).life, life + 3);
+}
+
+#[test]
+fn convoke_taps_creatures_to_pay() {
+    let mut g = game(2);
+    let a = put(&mut g, P0, bears());
+    let b = put(&mut g, P0, bears());
+    let spell = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Convoke",
+            "{2}{G}",
+            &[CardType::Sorcery],
+            &[],
+            "Convoke\nYou gain 4 life.",
+        ),
+    );
+    add_mana(&mut g, P0, "G");
+    assert!(g.castable(P0).contains(&spell));
+    let life = g.player(P0).life;
+    cast(&mut g, P0, spell, vec![]);
+    resolve_all(&mut g);
+    assert_eq!(g.player(P0).life, life + 4);
+    assert!(g.object(a).unwrap().tapped && g.object(b).unwrap().tapped);
+}
+
+#[test]
+fn infect_poisons_and_undying_returns() {
+    let mut g = game(2);
+    let mut d = (*card("Test Infector", "{B}", &[CardType::Creature], &[], "Infect")).clone();
+    d.power = Some(3);
+    let inf = put(&mut g, P0, Arc::new(d));
+    let blocker = put(&mut g, P1, vanilla("Wall", 0, 4));
+    while !matches!(g.decision(), Decision::DeclareAttackers { .. }) {
+        default_answer(&mut g);
+    }
+    g.submit(P0, Action::Attack(vec![(inf, P1)])).unwrap();
+    while !matches!(g.decision(), Decision::DeclareBlockers { .. }) {
+        default_answer(&mut g);
+    }
+    g.submit(P1, Action::Block(vec![])).unwrap();
+    pass_until(&mut g, Step::Main2);
+    assert_eq!(g.player(P1).poison, 3);
+    let _ = blocker;
+
+    let ghoul = put(
+        &mut g,
+        P0,
+        card("Test Ghoul", "{B}", &[CardType::Creature], &[], "Undying"),
+    );
+    let b = in_hand(&mut g, P0, bolt());
+    add_mana(&mut g, P0, "R");
+    cast(&mut g, P0, b, vec![Target::Object(ghoul)]);
+    resolve_all(&mut g);
+    let back = find(&g, "Test Ghoul");
+    assert_eq!(pt(&g, back), (3, 3));
+}
+
+#[test]
+fn evoke_monarch_toxic_and_shocklands() {
+    let mut g = game(2);
+    // Evoke: cheap, the ETB still happens, then it's sacrificed.
+    let ele = in_hand(
+        &mut g,
+        P0,
+        card(
+            "Test Elemental",
+            "{3}{W}{W}",
+            &[CardType::Creature],
+            &[],
+            "When Test Elemental enters, you become the monarch.\nEvoke {W}",
+        ),
+    );
+    add_mana(&mut g, P0, "W");
+    cast_with(
+        &mut g,
+        P0,
+        ele,
+        vec![],
+        CastOptions {
+            evoke: true,
+            ..Default::default()
+        },
+    );
+    settle(&mut g);
+    assert_eq!(g.monarch, Some(P0));
+    assert!(!g
+        .battlefield
+        .iter()
+        .any(|id| g.object(*id).unwrap().def.name == "Test Elemental"));
+    // The monarch draws at their end step.
+    let hand = g.hand(P0).len();
+    pass_until(&mut g, Step::End);
+    assert_eq!(g.hand(P0).len(), hand + 1);
+
+    // Shockland: plenty of life, so it's paid and the land enters untapped.
+    let life = g.player(P1).life;
+    let shock = put(
+        &mut g,
+        P1,
+        card(
+            "Test Shock",
+            "",
+            &[CardType::Land],
+            &[],
+            "As Test Shock enters, you may pay 2 life. If you don't, it enters tapped.\n{T}: Add {R} or {G}.",
+        ),
+    );
+    assert!(!g.object(shock).unwrap().tapped);
+    assert_eq!(g.player(P1).life, life - 2);
+
+    // Toxic: P1 attacks P0 on their turn and takes the crown.
+    let viper = put(
+        &mut g,
+        P1,
+        card("Test Viper", "{G}", &[CardType::Creature], &[], "Toxic 2"),
+    );
+    while !(g.active == P1 && matches!(g.decision(), Decision::DeclareAttackers { .. })) {
+        default_answer(&mut g);
+    }
+    g.submit(P1, Action::Attack(vec![(viper, P0)])).unwrap();
+    pass_until(&mut g, Step::Main2);
+    assert_eq!(g.player(P0).poison, 2);
+    assert_eq!(g.monarch, Some(P1));
 }

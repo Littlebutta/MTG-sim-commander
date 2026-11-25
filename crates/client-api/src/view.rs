@@ -50,6 +50,8 @@ pub struct CardView {
     /// Modal spells: each mode's text and target descriptions.
     pub spell_modes: Vec<(String, Vec<String>)>,
     pub has_x: bool,
+    /// A face-down card (morph, disguise).
+    pub face_down: bool,
     pub unsupported: bool,
     pub zone: String,
 }
@@ -71,6 +73,7 @@ pub struct SeatView {
     pub color_identity: Vec<char>,
     pub is_you: bool,
     pub is_active: bool,
+    pub monarch: bool,
     pub has_priority: bool,
     pub lost: bool,
     /// Mulligans taken this game.
@@ -109,6 +112,10 @@ pub struct Hints {
     pub cast_targets: BTreeMap<u32, Vec<Vec<Target>>>,
     /// Modal spells: the legal choices per target slot for each castable mode ("card:mode").
     pub mode_targets: BTreeMap<String, Vec<Vec<Target>>>,
+    /// Every way each castable card can be cast now (normal, kicked, buyback, face down).
+    pub cast_ways: Vec<(u32, CastOptions)>,
+    /// Your face-down permanents you can turn face up now (`Action::TurnFaceUp`).
+    pub face_up: Vec<u32>,
     pub ability_targets: BTreeMap<String, Vec<Vec<Target>>>,
     pub triggers: Vec<TriggerChoiceView>,
     pub discard_count: usize,
@@ -160,8 +167,12 @@ pub(crate) fn card_view(
     ch: &Characteristics,
     id: ObjectId,
     activatable: &[(ObjectId, usize)],
+    viewer: PlayerId,
 ) -> CardView {
     let o = g.object(id).expect("object exists");
+    // Face-down (CR 708.6): its controller may look at it, nobody else can.
+    let hidden = o.face_down && matches!(o.zone, Zone::Stack | Zone::Battlefield);
+    let peek = hidden && ch.controller == viewer;
     let keywords: Vec<String> = ch
         .abilities
         .iter()
@@ -211,7 +222,14 @@ pub(crate) fn card_view(
         .collect();
     CardView {
         id: id.0,
-        name: ch.name.clone(),
+        name: if peek {
+            format!("{} (face down)", o.def.name)
+        } else if hidden {
+            "Face-down creature".into()
+        } else {
+            ch.name.clone()
+        },
+        face_down: hidden,
         mana_cost: ch.mana_cost.to_string(),
         mana_value: ch.mana_value(),
         colors: ch.colors.iter().map(|c| c.letter()).collect(),
@@ -219,11 +237,20 @@ pub(crate) fn card_view(
         types: type_names(ch.types.iter()),
         subtypes: ch.subtypes.clone(),
         type_line,
-        text: o.def.oracle_text.clone(),
+        text: if peek {
+            format!(
+                "Face down: a 2/2 creature with no text.\n\n{}",
+                o.def.oracle_text
+            )
+        } else if hidden {
+            "A face-down 2/2 creature with no text.".into()
+        } else {
+            o.def.oracle_text.clone()
+        },
         power: ch.power,
         toughness: ch.toughness,
-        base_power: o.def.power,
-        base_toughness: o.def.toughness,
+        base_power: if hidden { Some(2) } else { o.def.power },
+        base_toughness: if hidden { Some(2) } else { o.def.toughness },
         loyalty: o.counters.get(&CounterKind::Loyalty).copied(),
         damage: o.damage,
         counters,
@@ -247,11 +274,16 @@ pub(crate) fn card_view(
             .find(|(b, _)| *b == id)
             .map(|(_, a)| a.0),
         abilities,
-        spell_targets: o.def.spell_targets.iter().map(target_spec_label).collect(),
+        spell_targets: if hidden {
+            vec![]
+        } else {
+            o.def.spell_targets.iter().map(target_spec_label).collect()
+        },
         spell_modes: o
             .def
             .spell_modes
             .iter()
+            .filter(|_| !hidden)
             .map(|m| {
                 (
                     m.text.clone(),
@@ -260,7 +292,7 @@ pub(crate) fn card_view(
             })
             .collect(),
         has_x: o.def.mana_cost.has_x(),
-        unsupported: !o.def.fully_supported(),
+        unsupported: !o.def.fully_supported() && (!hidden || peek),
         zone: format!("{:?}", o.zone),
     }
 }
@@ -270,7 +302,13 @@ fn target_label(g: &Game, view: &View, t: &Target) -> String {
         Target::Player(p) => g.player(*p).name.clone(),
         Target::Object(id) => view
             .get(*id)
-            .map(|c| c.name.clone())
+            .map(|c| {
+                if c.name.is_empty() {
+                    "a face-down creature".to_string()
+                } else {
+                    c.name.clone()
+                }
+            })
             .or_else(|| {
                 g.stack.iter().find(|e| e.id == *id).map(|e| match &e.kind {
                     StackKind::Ability { source_name, .. } => format!("{source_name} ability"),
@@ -284,7 +322,10 @@ fn target_label(g: &Game, view: &View, t: &Target) -> String {
 pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
     let view = g.view();
     let activatable = g.activatable(viewer);
-    let cv = |id: &ObjectId| view.get(*id).map(|ch| card_view(g, ch, *id, &activatable));
+    let cv = |id: &ObjectId| {
+        view.get(*id)
+            .map(|ch| card_view(g, ch, *id, &activatable, viewer))
+    };
     let decision = g.decision().clone();
     let priority = match &decision {
         Decision::Priority { player } => Some(*player),
@@ -347,6 +388,7 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
                 color_identity: identity.iter().map(|c| c.letter()).collect(),
                 is_you: p.id == viewer,
                 is_active: p.id == g.active,
+                monarch: g.monarch == Some(p.id),
                 has_priority: priority == Some(p.id),
                 mulligans: p.mulligans,
                 lost: p.has_lost || p.has_left,
@@ -481,6 +523,12 @@ pub(crate) fn build(g: &Game, viewer: PlayerId) -> PlayerView {
         playable_lands: g.playable_lands(viewer).iter().map(|i| i.0).collect(),
         castable: castable.iter().map(|i| i.0).collect(),
         mode_targets,
+        cast_ways: g
+            .cast_ways(viewer)
+            .into_iter()
+            .map(|(id, o)| (id.0, o))
+            .collect(),
+        face_up: g.can_turn_face_up(viewer).iter().map(|i| i.0).collect(),
         activatable: activatable.iter().map(|(o, i)| (o.0, *i)).collect(),
         attackers: if matches!(decision, Decision::DeclareAttackers { player } if player == viewer)
         {

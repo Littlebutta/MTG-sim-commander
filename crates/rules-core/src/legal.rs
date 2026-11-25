@@ -2,10 +2,11 @@
 //! These are conveniences for the UI: `Game::submit` remains the authority on legality.
 
 use crate::card::{Ability, CardType, CounterKind, Keyword};
-use crate::engine::{plan_auto_tap, Decision};
+use crate::engine::{plan_auto_tap, CastOptions, Decision};
 use crate::game::Game;
 use crate::ids::{ObjectId, PlayerId};
-use crate::mana::ManaCost;
+use crate::layers::Characteristics;
+use crate::mana::{ManaCost, ManaType};
 use crate::state::Zone;
 
 impl Game {
@@ -17,6 +18,27 @@ impl Game {
             return true;
         }
         plan_auto_tap(&pool, &self.auto_mana_sources(p), cost, life).is_some()
+    }
+
+    /// Like `can_afford`, with convoke/improvise/delve helpers.
+    pub fn can_afford_with(
+        &self,
+        p: PlayerId,
+        cost: &ManaCost,
+        helpers: &[(ObjectId, Vec<ManaType>)],
+    ) -> bool {
+        if helpers.is_empty() {
+            return self.can_afford(p, cost);
+        }
+        let life = self.player(p).life;
+        let pool = self.player(p).mana_pool.clone();
+        let mut sources = self.auto_mana_sources(p);
+        for h in helpers {
+            if !sources.iter().any(|(id, _)| *id == h.0) {
+                sources.push(h.clone());
+            }
+        }
+        plan_auto_tap(&pool, &sources, cost, life).is_some()
     }
 
     fn has_priority(&self, p: PlayerId) -> bool {
@@ -38,9 +60,22 @@ impl Game {
             .collect()
     }
 
-    /// Cards in hand or the command zone that `p` could cast right now, ignoring X choices.
+    /// Cards in hand, the command zone or (with flashback) the graveyard that `p` could cast
+    /// right now some way, ignoring X choices.
     pub fn castable(&self, p: PlayerId) -> Vec<ObjectId> {
-        if !self.has_priority(p) {
+        let mut out: Vec<ObjectId> = Vec::new();
+        for (id, _) in self.cast_ways(p) {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
+    /// Every card `p` could cast now and each way to cast it (normal, kicked, with buyback,
+    /// face down). Kicked and buyback are only listed when they can be paid.
+    pub fn cast_ways(&self, p: PlayerId) -> Vec<(ObjectId, CastOptions)> {
+        if !self.has_priority(p) || self.split_second_on_stack() {
             return vec![];
         }
         let view = self.view();
@@ -51,38 +86,91 @@ impl Game {
                 .copied()
                 .filter(|id| self.objects[id].owner == p),
         );
-        candidates
-            .into_iter()
-            .filter(|id| {
-                let o = &self.objects[id];
-                if o.def.has_type(CardType::Land) {
+        candidates.extend(
+            self.player(p)
+                .graveyard
+                .iter()
+                .copied()
+                .filter(|id| self.objects[id].def.flashback_cost().is_some()),
+        );
+        let mut out = Vec::new();
+        for id in candidates {
+            let o = &self.objects[&id];
+            if o.def.has_type(CardType::Land) {
+                continue;
+            }
+            let Some(ch) = view.get(id) else { continue };
+            let mut ways = vec![CastOptions::default()];
+            if o.def.morph().is_some() && o.zone == Zone::Hand {
+                ways.push(CastOptions {
+                    face_down: true,
+                    ..Default::default()
+                });
+            }
+            if o.def.kicker_cost().is_some() {
+                ways.push(CastOptions {
+                    kicked: true,
+                    ..Default::default()
+                });
+            }
+            if o.def.evoke_cost().is_some() && o.zone == Zone::Hand {
+                ways.push(CastOptions {
+                    evoke: true,
+                    ..Default::default()
+                });
+            }
+            if o.def.buyback_cost().is_some() {
+                ways.push(CastOptions {
+                    buyback: true,
+                    ..Default::default()
+                });
+            }
+            for opts in ways {
+                if self.can_cast_way(p, id, ch, opts) {
+                    out.push((id, opts));
+                }
+            }
+        }
+        out
+    }
+
+    fn can_cast_way(
+        &self,
+        p: PlayerId,
+        id: ObjectId,
+        ch: &Characteristics,
+        opts: CastOptions,
+    ) -> bool {
+        let o = &self.objects[&id];
+        let instant =
+            !opts.face_down && (ch.has_type(CardType::Instant) || ch.has_keyword(Keyword::Flash));
+        if !instant && !self.sorcery_timing_ok(p) {
+            return false;
+        }
+        if !opts.face_down {
+            // At least one mode (or the spell itself) has legal targets for every slot.
+            if !o.def.mode_choices().into_iter().any(|m| {
+                o.def.spell_parts(m).is_some_and(|(specs, _)| {
+                    specs
+                        .iter()
+                        .all(|s| !self.legal_targets(p, Some(id), s).is_empty())
+                })
+            }) {
+                return false;
+            }
+            if let Some(c) = o.def.additional_cost() {
+                if self.check_extra_cost(p, id, c).is_err() {
                     return false;
                 }
-                let Some(ch) = view.get(*id) else {
-                    return false;
-                };
-                let instant = ch.has_type(CardType::Instant) || ch.has_keyword(Keyword::Flash);
-                if !instant && !self.sorcery_timing_ok(p) {
-                    return false;
-                }
-                // At least one mode (or the spell itself) has legal targets for every slot.
-                if !o.def.mode_choices().into_iter().any(|m| {
-                    o.def.spell_parts(m).is_some_and(|(specs, _)| {
-                        specs
-                            .iter()
-                            .all(|s| !self.legal_targets(p, Some(*id), s).is_empty())
-                    })
-                }) {
-                    return false;
-                }
-                let tax = if o.zone == Zone::Command {
-                    self.commander_tax(p, *id)
-                } else {
-                    0
-                };
-                self.can_afford(p, &o.def.mana_cost.with_x_and_extra(0, tax))
-            })
-            .collect()
+            }
+        }
+        let cost = self.spell_mana_cost(p, id, opts, 0);
+        let helpers = if opts.face_down {
+            vec![]
+        } else {
+            self.cast_helpers(p, id, ch)
+        };
+        self.can_afford_with(p, &cost, &helpers)
     }
 
     /// Activated abilities (including mana abilities) `p` could activate: (object, ability index).
@@ -92,17 +180,24 @@ impl Game {
         }
         let view = self.view();
         let mut out = Vec::new();
+        if self.split_second_on_stack() {
+            return vec![];
+        }
         let hand = self.player(p).hand.clone();
-        for (id, in_hand) in self
+        let yard = self.player(p).graveyard.clone();
+        // Where the object is: 0 battlefield, 1 hand, 2 graveyard.
+        for (id, place) in self
             .battlefield
             .iter()
-            .map(|id| (id, false))
-            .chain(hand.iter().map(|id| (id, true)))
+            .map(|id| (id, 0))
+            .chain(hand.iter().map(|id| (id, 1)))
+            .chain(yard.iter().map(|id| (id, 2)))
         {
             let Some(ch) = view.get(*id) else { continue };
-            if ch.controller != p && !in_hand {
+            if ch.controller != p && place == 0 {
                 continue;
             }
+            let in_hand = place == 1;
             let o = &self.objects[id];
             for (i, a) in ch.abilities.iter().enumerate() {
                 let (cost, sorcery, targets) = match &a.ability {
@@ -115,8 +210,13 @@ impl Game {
                     } => (cost, *sorcery_speed, targets.as_slice()),
                     _ => continue,
                 };
-                if cost.discard_this != in_hand {
+                if cost.discard_this != in_hand || cost.from_graveyard != (place == 2) {
                     continue;
+                }
+                if let Some(n) = cost.crew {
+                    if self.crew_choice(p, *id, n).is_none() {
+                        continue;
+                    }
                 }
                 if cost.tap
                     && (o.tapped
@@ -164,6 +264,24 @@ impl Game {
             }
         }
         out
+    }
+
+    /// Face-down permanents `p` controls whose morph/disguise cost they can pay now.
+    pub fn can_turn_face_up(&self, p: PlayerId) -> Vec<ObjectId> {
+        if !self.has_priority(p) {
+            return vec![];
+        }
+        let view = self.view();
+        self.battlefield
+            .iter()
+            .copied()
+            .filter(|id| {
+                let o = &self.objects[id];
+                o.face_down
+                    && view.controller(*id) == Some(p)
+                    && o.def.morph().is_some_and(|(c, _, _)| self.can_afford(p, c))
+            })
+            .collect()
     }
 
     pub fn possible_attackers(&self) -> Vec<ObjectId> {

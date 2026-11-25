@@ -60,6 +60,7 @@ fn sorcery_speed_rules() {
             targets: vec![],
             x: 0,
             mode: None,
+            opts: Default::default(),
         },
     );
     assert!(
@@ -147,6 +148,7 @@ fn casting_auto_taps_lands_and_rejects_unpayable_costs() {
             targets: vec![],
             x: 0,
             mode: None,
+            opts: Default::default(),
         },
     );
     assert!(

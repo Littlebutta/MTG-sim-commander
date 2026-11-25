@@ -79,6 +79,28 @@ pub fn describe_effect(e: &Effect) -> String {
         Effect::ControllerOfTargetGainsLifeEqualToPower { .. } => {
             "Its controller gains life equal to its power".into()
         }
+        Effect::IfKicked { then, .. } => format!("If kicked: {}", describe_effects(then)),
+        Effect::WardCounter { .. } => {
+            "Counter that spell or ability unless its controller pays the ward cost".into()
+        }
+        Effect::CounterUnlessPays { mana, .. } => {
+            format!("Counter target spell unless its controller pays {mana}")
+        }
+        Effect::ReturnThisToBattlefield { .. } => "Return it to the battlefield".into(),
+        Effect::Unearth => "Return this card to the battlefield with haste (unearth)".into(),
+        Effect::ExileThis => "Exile this".into(),
+        Effect::SacrificeThis => "Sacrifice this".into(),
+        Effect::BecomeMonarch => "You become the monarch".into(),
+        Effect::DrawAtNextUpkeep => "Draw a card at the beginning of the next upkeep".into(),
+        Effect::SacrificeThisUnlessPay(m) => format!("Sacrifice this unless you pay {m}"),
+    }
+}
+
+fn ward_cost(c: &WardCost) -> String {
+    match c {
+        WardCost::Mana(m) => m.to_string(),
+        WardCost::Life(n) => format!("—Pay {n} life"),
+        WardCost::Discard => "—Discard a card".into(),
     }
 }
 
@@ -105,6 +127,12 @@ fn cost(c: &Cost) -> String {
     }
     if c.discard_this {
         parts.push("Discard this card".into());
+    }
+    if c.exile_this {
+        parts.push("Exile this card".into());
+    }
+    if let Some(n) = c.crew {
+        parts.push(format!("Crew {n}"));
     }
     if c.discard > 0 {
         parts.push(match c.discard {
@@ -166,6 +194,38 @@ pub fn describe_ability(a: &Ability) -> String {
         }
         Ability::NoMaxHandSize => "No maximum hand size".into(),
         Ability::EntersTappedUnless(_) => "Enters tapped unless a condition is met".into(),
+        Ability::Flashback(c) => format!("Flashback {c}"),
+        Ability::Kicker(c) => format!("Kicker {c}"),
+        Ability::Buyback(c) => format!("Buyback {c}"),
+        Ability::Echo(c) => format!("Echo {c}"),
+        Ability::Morph {
+            cost,
+            megamorph,
+            disguise,
+        } => format!(
+            "{} {cost}",
+            if *disguise {
+                "Disguise"
+            } else if *megamorph {
+                "Megamorph"
+            } else {
+                "Morph"
+            }
+        ),
+        Ability::Ward(c) => format!("Ward {}", ward_cost(c)),
+        Ability::AdditionalCost(c) => format!("As an additional cost: {}", cost(c)),
+        Ability::EntersWithCountersIfKicked { amount, .. } => {
+            format!("If kicked, enters with {amount} +1/+1 counter(s)")
+        }
+        Ability::CantBeBlockedByPowerAtMost(n) => {
+            format!("Can't be blocked by creatures with power {n} or less")
+        }
+        Ability::CostReduction(_) => "Costs less to cast".into(),
+        Ability::Toxic(n) => format!("Toxic {n}"),
+        Ability::Evoke(c) => format!("Evoke {c}"),
+        Ability::EntersTappedUnlessPayLife(n) => {
+            format!("As it enters, you may pay {n} life; if you don't, it enters tapped")
+        }
         Ability::Unsupported(t) => t.clone(),
     }
 }

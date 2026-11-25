@@ -35,7 +35,8 @@ export type Action =
   | "Concede"
   | { Keep: { bottom: number[] } }
   | { PlayLand: number }
-  | { Cast: { card: number; targets: Target[]; x: number; mode?: number | null } }
+  | { Cast: { card: number; targets: Target[]; x: number; mode?: number | null; opts?: CastOptions } }
+  | { TurnFaceUp: number }
   | { Activate: { object: number; ability: number; targets: Target[]; x: number } }
   | { ActivateMana: { object: number; ability: number; color: string | null } }
   | { OrderTriggers: [number, Target[]][] }
@@ -88,8 +89,18 @@ export interface CardView {
   /** Modal spells: each mode's text and target descriptions. */
   spell_modes?: [string, string[]][];
   has_x: boolean;
+  /** A face-down card (morph, disguise). */
+  face_down?: boolean;
   unsupported: boolean;
   zone: string;
+}
+
+/** Optional costs and alternative ways to cast a spell. */
+export interface CastOptions {
+  kicked?: boolean;
+  face_down?: boolean;
+  buyback?: boolean;
+  evoke?: boolean;
 }
 
 export interface SeatView {
@@ -98,6 +109,8 @@ export interface SeatView {
   mulligans?: number;
   life: number;
   poison: number;
+  /** The monarch draws a card at the beginning of their end step. */
+  monarch?: boolean;
   hand_count: number;
   library_count: number;
   graveyard: CardView[];
@@ -146,6 +159,10 @@ export interface Hints {
   mulligan_bottom: number;
   /** Tapped permanents whose unspent mana can be taken back. */
   undo_mana: number[];
+  /** Every way each castable card can be cast now. */
+  cast_ways?: [number, CastOptions][];
+  /** Your face-down permanents you can turn face up now. */
+  face_up?: number[];
 }
 
 export interface PlayerView {

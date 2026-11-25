@@ -172,6 +172,24 @@ impl ManaCost {
         self.0.contains(&ManaSymbol::X)
     }
 
+    /// The cost with up to `n` generic mana removed (cost reductions, CR 601.2f).
+    pub fn reduce_generic(&self, mut n: u32) -> ManaCost {
+        let mut out = Vec::new();
+        for s in &self.0 {
+            match s {
+                ManaSymbol::Generic(g) if n > 0 => {
+                    let cut = (*g).min(n);
+                    n -= cut;
+                    if g - cut > 0 {
+                        out.push(ManaSymbol::Generic(g - cut));
+                    }
+                }
+                s => out.push(*s),
+            }
+        }
+        ManaCost(out)
+    }
+
     /// The cost with X replaced by a number and extra generic mana added (commander tax etc.).
     pub fn with_x_and_extra(&self, x: u32, extra_generic: u32) -> ManaCost {
         let mut syms: Vec<ManaSymbol> = self

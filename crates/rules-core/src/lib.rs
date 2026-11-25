@@ -17,7 +17,7 @@ pub mod mana;
 pub mod state;
 
 pub use card::*;
-pub use engine::{Action, Decision, RulesError};
+pub use engine::{Action, CastOptions, Decision, RulesError};
 pub use game::{DeckSpec, Game, GameConfig};
 pub use ids::*;
 pub use layers::{Characteristics, View};
