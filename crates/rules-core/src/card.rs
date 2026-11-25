@@ -121,6 +121,34 @@ pub enum Keyword {
     Devoid,
     /// "~ doesn't untap during your untap step."
     DoesntUntap,
+    /// Creatures you control can tap to help pay for this spell (CR 702.51).
+    Convoke,
+    /// Artifacts you control can tap to pay generic mana for this spell (CR 702.126).
+    Improvise,
+    /// Exile cards from your graveyard to pay generic mana for this spell (CR 702.66).
+    Delve,
+    /// Whenever a creature you control attacks alone, it gets +1/+1 (CR 702.83).
+    Exalted,
+    /// Deals damage to creatures as -1/-1 counters and to players as poison (CR 702.90).
+    Infect,
+    /// Deals damage to creatures as -1/-1 counters (CR 702.80).
+    Wither,
+    /// Returns with a +1/+1 counter if it dies without one (CR 702.93).
+    Undying,
+    /// Returns with a -1/-1 counter if it dies without one (CR 702.79).
+    Persist,
+    /// Blockers without flanking get -1/-1 (CR 702.25).
+    Flanking,
+    /// "~ attacks each combat if able."
+    AttacksEachCombat,
+    /// "~ blocks each combat if able."
+    BlocksEachCombat,
+    /// Protection from artifacts, everything, etc. are separate; this one is from multicolored.
+    ProtectionFromArtifacts,
+    /// Can block an additional creature each combat.
+    ExtraBlock,
+    /// Split second (CR 702.61): no spells or non-mana abilities while it's on the stack.
+    SplitSecond,
 }
 
 impl Keyword {
@@ -146,6 +174,11 @@ impl Keyword {
             Keyword::CanBlockOnlyFlyers => "Can block only flyers".into(),
             Keyword::CantBeBlockedByMoreThanOne => "Can't be blocked by more than one".into(),
             Keyword::DoesntUntap => "Doesn't untap".into(),
+            Keyword::AttacksEachCombat => "Attacks each combat if able".into(),
+            Keyword::BlocksEachCombat => "Blocks each combat if able".into(),
+            Keyword::ProtectionFromArtifacts => "Protection from artifacts".into(),
+            Keyword::ExtraBlock => "Can block an additional creature".into(),
+            Keyword::SplitSecond => "Split second".into(),
             Keyword::ProtectionFromWhite => "Protection from white".into(),
             Keyword::ProtectionFromBlue => "Protection from blue".into(),
             Keyword::ProtectionFromBlack => "Protection from black".into(),
@@ -190,6 +223,17 @@ impl Keyword {
             "protection from green" => Keyword::ProtectionFromGreen,
             "changeling" => Keyword::Changeling,
             "devoid" => Keyword::Devoid,
+            "convoke" => Keyword::Convoke,
+            "improvise" => Keyword::Improvise,
+            "delve" => Keyword::Delve,
+            "exalted" => Keyword::Exalted,
+            "infect" => Keyword::Infect,
+            "wither" => Keyword::Wither,
+            "undying" => Keyword::Undying,
+            "persist" => Keyword::Persist,
+            "flanking" => Keyword::Flanking,
+            "protection from artifacts" => Keyword::ProtectionFromArtifacts,
+            "split second" => Keyword::SplitSecond,
             _ => return None,
         })
     }
@@ -236,6 +280,17 @@ pub struct Filter {
     pub attached_to_this: bool,
     /// Object must be untapped / tapped.
     pub tapped: Option<bool>,
+    /// Must be attacking (or, with `blocking` too, attacking or blocking).
+    #[serde(default)]
+    pub attacking: bool,
+    /// Must be blocking (or, with `attacking` too, attacking or blocking).
+    #[serde(default)]
+    pub blocking: bool,
+    /// Power at most / at least this.
+    #[serde(default)]
+    pub power_at_most: Option<i32>,
+    #[serde(default)]
+    pub power_at_least: Option<i32>,
 }
 
 impl Filter {
@@ -437,6 +492,47 @@ pub enum Effect {
     ReturnThisToHand,
     /// Untap the source permanent.
     UntapThis,
+    /// Undying, persist, "return it to the battlefield": the source card, if it's still in the
+    /// graveyard, returns under its owner's control.
+    ReturnThisToBattlefield {
+        counter: Option<CounterKind>,
+    },
+    /// Exile the source (a permanent, or a spell as it finishes resolving).
+    ExileThis,
+    /// Sacrifice the source permanent (evoke).
+    SacrificeThis,
+    /// "You become the monarch" (CR 724).
+    BecomeMonarch,
+    /// "Draw a card at the beginning of the next turn's upkeep."
+    DrawAtNextUpkeep,
+    /// "Sacrifice ~ unless you pay {N}" (echo, upkeep costs). Paid automatically if possible.
+    SacrificeThisUnlessPay(ManaCost),
+    /// Unearth (CR 702.84): return the source card from the graveyard with haste; exile it at
+    /// the next end step or if it would leave.
+    Unearth,
+    /// "If this spell was kicked, ..." (otherwise the second list, for "... instead").
+    IfKicked {
+        then: Vec<Effect>,
+        otherwise: Vec<Effect>,
+    },
+    /// Ward (CR 702.21): counter that spell or ability unless its controller pays.
+    WardCounter {
+        stack_object: crate::ids::ObjectId,
+        cost: WardCost,
+    },
+    /// "Counter target spell unless its controller pays {N}."
+    CounterUnlessPays {
+        target: usize,
+        mana: ManaCost,
+    },
+}
+
+/// What a ward ability asks for.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum WardCost {
+    Mana(ManaCost),
+    Life(u32),
+    Discard,
 }
 
 /// The condition of an "enters tapped unless" land, checked as it enters.
@@ -477,6 +573,8 @@ pub enum Affected {
     ThisObject,
     Filter(Filter),
     ControllerOfThis,
+    /// A specific object (abilities the engine creates, like flanking's).
+    Object(crate::ids::ObjectId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -612,6 +710,16 @@ pub struct Cost {
     /// Cycling and similar: the ability works from your hand, and discarding the card pays it.
     #[serde(default)]
     pub discard_this: bool,
+    /// Crew N (CR 702.122): tap untapped creatures you control with total power N or more.
+    #[serde(default)]
+    pub crew: Option<u32>,
+    /// The ability works from your graveyard and exiling the card pays it (unearth, scavenge
+    /// and "{2}: Return ~ from your graveyard to your hand").
+    #[serde(default)]
+    pub from_graveyard: bool,
+    /// Exile the card from the graveyard as part of the cost.
+    #[serde(default)]
+    pub exile_this: bool,
 }
 
 impl Cost {
@@ -664,6 +772,12 @@ pub enum TriggerEvent {
     CastThis,
     /// "Whenever an opponent casts a spell" / "Whenever a player casts a spell".
     PlayerCastsSpell(PlayerRef, Filter),
+    /// "When ~ is turned face up" (CR 708.8).
+    TurnedFaceUp,
+    /// "Whenever [filter] blocks".
+    Blocks(Filter),
+    /// "Whenever [filter] becomes blocked" (once per combat, CR 509.3c).
+    BecomesBlocked(Filter),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -707,6 +821,40 @@ pub enum Ability {
     NoMaxHandSize,
     /// "~ enters tapped unless ..." (checklands, fastlands, slowlands, battlelands...).
     EntersTappedUnless(EntryCondition),
+    /// Flashback (CR 702.34): cast from your graveyard for this cost, then exile it.
+    Flashback(ManaCost),
+    /// Kicker (CR 702.33): an optional additional cost.
+    Kicker(ManaCost),
+    /// Morph / megamorph / disguise (CR 702.37, 702.168): cast face down for {3}, turn face
+    /// up for this cost. Disguised permanents have ward {2} while face down.
+    Morph {
+        cost: ManaCost,
+        megamorph: bool,
+        disguise: bool,
+    },
+    /// Ward (CR 702.21).
+    Ward(WardCost),
+    /// "As an additional cost to cast this spell, sacrifice a creature / discard a card."
+    AdditionalCost(Cost),
+    /// Buyback (CR 702.27): an optional additional cost; the spell returns to your hand.
+    Buyback(ManaCost),
+    /// Echo (CR 702.30): at your next upkeep, sacrifice it unless you pay this.
+    Echo(ManaCost),
+    /// "If ~ was kicked, it enters with N +1/+1 counters on it."
+    EntersWithCountersIfKicked {
+        kind: CounterKind,
+        amount: u32,
+    },
+    /// "~ can't be blocked by creatures with power N or less."
+    CantBeBlockedByPowerAtMost(i32),
+    /// Toxic N (CR 702.164): combat damage to a player also gives N poison counters.
+    Toxic(u32),
+    /// Evoke (CR 702.74): cast for this cost instead; sacrificed when it enters.
+    Evoke(ManaCost),
+    /// "As ~ enters, you may pay N life. If you don't, it enters tapped."
+    EntersTappedUnlessPayLife(u32),
+    /// "This spell costs {1} less to cast for each artifact you control" (affinity etc.).
+    CostReduction(Amount),
     /// Text the engine can't execute yet; kept so the UI can show it and flag the card.
     Unsupported(String),
 }
@@ -763,6 +911,53 @@ impl CardDef {
         }
         let m = self.spell_modes.get(mode?)?;
         Some((&m.targets, &m.effects))
+    }
+
+    pub fn flashback_cost(&self) -> Option<&ManaCost> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::Flashback(c) => Some(c),
+            _ => None,
+        })
+    }
+
+    pub fn evoke_cost(&self) -> Option<&ManaCost> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::Evoke(c) => Some(c),
+            _ => None,
+        })
+    }
+
+    pub fn kicker_cost(&self) -> Option<&ManaCost> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::Kicker(c) => Some(c),
+            _ => None,
+        })
+    }
+
+    pub fn buyback_cost(&self) -> Option<&ManaCost> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::Buyback(c) => Some(c),
+            _ => None,
+        })
+    }
+
+    pub fn additional_cost(&self) -> Option<&Cost> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::AdditionalCost(c) => Some(c),
+            _ => None,
+        })
+    }
+
+    /// Morph cost, megamorph, disguise.
+    pub fn morph(&self) -> Option<(&ManaCost, bool, bool)> {
+        self.abilities.iter().find_map(|a| match a {
+            Ability::Morph {
+                cost,
+                megamorph,
+                disguise,
+            } => Some((cost, *megamorph, *disguise)),
+            _ => None,
+        })
     }
 
     /// The modes a caster can pick from: `[None]` for a normal spell.

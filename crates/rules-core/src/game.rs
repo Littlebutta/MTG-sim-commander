@@ -96,6 +96,10 @@ pub struct Game {
     /// Bumped on every state change; keys the characteristics cache.
     pub version: u64,
     pub(crate) view_cache: Mutex<Option<(u64, Arc<View>)>>,
+    /// The monarch (CR 724), if anyone is.
+    pub monarch: Option<PlayerId>,
+    /// "Draw a card at the beginning of the next turn's upkeep": (player, source, name).
+    pub(crate) next_upkeep_draws: Vec<(PlayerId, ObjectId, String)>,
 }
 
 /// Games are cloned for "what if" simulations (practice AI), so cloning must be cheap:
@@ -134,6 +138,8 @@ impl Clone for Game {
             config: self.config.clone(),
             version: self.version,
             view_cache: Mutex::new(self.view_cache.lock().ok().and_then(|c| c.clone())),
+            monarch: self.monarch,
+            next_upkeep_draws: self.next_upkeep_draws.clone(),
         }
     }
 }
@@ -171,6 +177,8 @@ impl Game {
             config: config.clone(),
             version: 0,
             view_cache: Mutex::new(None),
+            monarch: None,
+            next_upkeep_draws: Vec::new(),
         };
         for (i, deck) in decks.iter().enumerate() {
             let pid = PlayerId(i as u8);
@@ -289,7 +297,7 @@ impl Game {
     ) -> ObjectId {
         let card = CardId(self.next_card);
         self.next_card += 1;
-        self.create_object_for_card(def, card, owner, owner, zone)
+        self.create_object_for_card(def, card, owner, owner, zone, (false, false, false))
     }
 
     fn create_object_for_card(
@@ -299,6 +307,8 @@ impl Game {
         owner: PlayerId,
         controller: PlayerId,
         zone: Zone,
+        // (kicked, face down, evoked), carried from the stack onto the battlefield.
+        carry: (bool, bool, bool),
     ) -> ObjectId {
         let id = ObjectId(self.next_object);
         self.next_object += 1;
@@ -323,6 +333,13 @@ impl Game {
                 attached_to: None,
                 is_token,
                 new_in_zone: matches!(zone, Zone::Graveyard | Zone::Exile),
+                kicked: carry.0,
+                buyback: false,
+                face_down: carry.1,
+                exile_if_leaves: false,
+                exile_at_end_step: false,
+                echo_due: false,
+                evoked: carry.2,
                 loyalty_used: false,
                 regen_shields: 0,
                 activated_this_turn: Vec::new(),
@@ -390,6 +407,14 @@ impl Game {
         {
             to = Zone::Command;
         }
+        // Flashback (702.34a) and unearth (702.84a): exile it instead.
+        if obj.exile_if_leaves
+            && matches!(obj.zone, Zone::Stack | Zone::Battlefield)
+            && to != Zone::Exile
+            && !(obj.zone == Zone::Stack && to == Zone::Battlefield)
+        {
+            to = Zone::Exile;
+        }
         // Remove from old zone.
         let from = obj.zone;
         self.zone_list_mut(from, obj.owner).retain(|x| *x != id);
@@ -405,14 +430,27 @@ impl Game {
             Zone::Battlefield | Zone::Stack => controller.unwrap_or(obj.owner),
             _ => obj.owner,
         };
-        let new_id = self.create_object_for_card(obj.def.clone(), obj.card, obj.owner, ctl, to);
+        let carry = if from == Zone::Stack && to == Zone::Battlefield {
+            (obj.kicked, obj.face_down, obj.evoked)
+        } else if to == Zone::Stack {
+            (false, obj.face_down, false)
+        } else {
+            (false, false, false)
+        };
+        let new_id =
+            self.create_object_for_card(obj.def.clone(), obj.card, obj.owner, ctl, to, carry);
         if let Some(o) = self.objects.get_mut(&new_id) {
             o.is_token = obj.is_token;
             if ask {
                 o.new_in_zone = true;
             }
         }
-        let name = obj.def.name.clone();
+        // A face-down card stays hidden while it moves between hidden-ish zones (CR 708.5).
+        let name = if obj.face_down && matches!(to, Zone::Stack | Zone::Battlefield) {
+            "A face-down card".to_string()
+        } else {
+            obj.def.name.clone()
+        };
         self.log(format!("{name}: {:?} -> {:?}", from, to));
         Some(new_id)
     }
@@ -456,6 +494,26 @@ impl Game {
     /// tapped", "enters with counters", a planeswalker's starting loyalty (CR 306.5b).
     fn enter_battlefield_replacements(&mut self, id: ObjectId) {
         let def = self.objects[&id].def.clone();
+        // A face-down permanent has no abilities (CR 708.2).
+        if self.objects[&id].face_down {
+            return;
+        }
+        let kicked = self.objects[&id].kicked;
+        for a in &def.abilities {
+            if let Ability::EntersTappedUnlessPayLife(n) = a {
+                // Shocklands: pay the life while it's affordable without getting low
+                // (chosen automatically for now).
+                let p = self.objects[&id].base_controller;
+                if self.player(p).life > (*n as i32) + 8 {
+                    self.players[p.0 as usize].life -= *n as i32;
+                } else {
+                    self.objects.get_mut(&id).unwrap().tapped = true;
+                }
+            }
+        }
+        if def.abilities.iter().any(|a| matches!(a, Ability::Echo(_))) {
+            self.objects.get_mut(&id).unwrap().echo_due = true;
+        }
         for a in &def.abilities {
             match a {
                 Ability::EntersTapped => self.objects.get_mut(&id).unwrap().tapped = true,
@@ -468,6 +526,9 @@ impl Game {
                     kind,
                     amount: Amount::Fixed(n),
                 } if *n > 0 => self.add_counters(id, kind.clone(), *n as u32),
+                Ability::EntersWithCountersIfKicked { kind, amount } if kicked && *amount > 0 => {
+                    self.add_counters(id, kind.clone(), *amount)
+                }
                 _ => {}
             }
         }

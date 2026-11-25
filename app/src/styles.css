@@ -1107,3 +1107,13 @@ select.field option, select.field optgroup { background: var(--bg-1); color: var
 .gy-cards .card.tapped { transform: none; filter: none; margin: 0; }
 /* A tapped card is turned on its side; keep its label reading left to right, above it. */
 .card.tapped .card-tag { left: -16px; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); }
+
+/* Monarch and poison markers by a player's life total. */
+.seat-status { display: flex; gap: 4px; justify-content: center; margin-top: 2px; }
+.status-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45); color: #f3ead2; white-space: nowrap;
+}
+.status-chip.monarch { color: #f5d26b; }
+.status-chip.poison { color: #9fe07a; }

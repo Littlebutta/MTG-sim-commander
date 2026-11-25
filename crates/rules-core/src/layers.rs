@@ -236,6 +236,27 @@ pub fn compute(game: &Game) -> View {
     let mut chars: HashMap<ObjectId, Characteristics> = HashMap::new();
     for (id, obj) in &game.objects {
         let d = &obj.def;
+        // 708.2a: a face-down spell or permanent is a 2/2 creature with no name, text,
+        // subtypes or mana cost (its copiable values, layer 1).
+        if obj.face_down && matches!(obj.zone, Zone::Stack | Zone::Battlefield) {
+            chars.insert(
+                *id,
+                Characteristics {
+                    name: String::new(),
+                    mana_cost: ManaCost::default(),
+                    colors: ColorSet::default(),
+                    supertypes: Default::default(),
+                    types: [CardType::Creature].into_iter().collect(),
+                    subtypes: vec![],
+                    abilities: vec![],
+                    power: Some(2),
+                    toughness: Some(2),
+                    loyalty: None,
+                    controller: obj.base_controller,
+                },
+            );
+            continue;
+        }
         chars.insert(
             *id,
             Characteristics {
@@ -735,6 +756,23 @@ pub fn matches_filter(
     }
     if let Some(t) = f.tapped {
         if game.objects.get(&id).is_some_and(|o| o.tapped != t) {
+            return false;
+        }
+    }
+    if f.attacking || f.blocking {
+        let att = f.attacking && game.combat.attackers.iter().any(|(a, _)| *a == id);
+        let blk = f.blocking && game.combat.blockers.iter().any(|(b, _)| *b == id);
+        if !att && !blk {
+            return false;
+        }
+    }
+    if let Some(n) = f.power_at_most {
+        if c.power.unwrap_or(0) > n {
+            return false;
+        }
+    }
+    if let Some(n) = f.power_at_least {
+        if c.power.unwrap_or(0) < n {
             return false;
         }
     }

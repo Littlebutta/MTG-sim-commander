@@ -49,6 +49,27 @@ pub struct GameObject {
     /// Indices of "activate only once each turn" abilities used this turn.
     #[serde(default)]
     pub activated_this_turn: Vec<usize>,
+    /// Cast with its kicker paid (CR 702.33d); carried onto the battlefield.
+    #[serde(default)]
+    pub kicked: bool,
+    /// Buyback was paid: the spell returns to its owner's hand as it resolves.
+    #[serde(default)]
+    pub buyback: bool,
+    /// Face down (CR 708): a nameless 2/2 creature with no text.
+    #[serde(default)]
+    pub face_down: bool,
+    /// Flashback and unearth: exile it instead if it would leave the stack / battlefield.
+    #[serde(default)]
+    pub exile_if_leaves: bool,
+    /// Unearth: exile it at the beginning of the next end step.
+    #[serde(default)]
+    pub exile_at_end_step: bool,
+    /// Echo hasn't been paid yet (CR 702.30a).
+    #[serde(default)]
+    pub echo_due: bool,
+    /// Cast for its evoke cost (CR 702.74): sacrificed when it enters.
+    #[serde(default)]
+    pub evoked: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -117,7 +117,11 @@ fn priority(g: &Game, me: PlayerId) -> Action {
     let mut castable = g.castable(me);
     castable
         .sort_by_key(|id| std::cmp::Reverse(view.get(*id).map(|c| c.mana_value()).unwrap_or(0)));
+    let ways = g.cast_ways(me);
     for card in castable {
+        if !ways.contains(&(card, CastOptions::default())) {
+            continue;
+        }
         let def = &g.object(card).unwrap().def;
         // Modal spells: the first mode whose targets can all be picked.
         let Some((mode, specs, effects)) = def.mode_choices().into_iter().find_map(|m| {
@@ -176,6 +180,7 @@ fn priority(g: &Game, me: PlayerId) -> Action {
             targets,
             x: 0,
             mode,
+            opts: Default::default(),
         };
     }
     // Use non-mana activated abilities that deal damage or grow us, on our turn.

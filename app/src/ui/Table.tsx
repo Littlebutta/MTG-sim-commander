@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameSession, RewindPoint } from "../engine/session";
-import type { Action, CardView, PlayerView, SeatView, Step, Target } from "../engine/types";
+import type { Action, CardView, CastOptions, PlayerView, SeatView, Step, Target } from "../engine/types";
 import { decisionKind, sameTarget } from "../engine/types";
 import { themeForSeat, useSettings, type Settings } from "../settings";
 import { Card, CardPreview, ManaCost, RulesPopup } from "./Card";
@@ -25,8 +25,8 @@ type Mode =
       /** Triggered abilities must go on the stack; they can't be called off. */
       cancellable: boolean;
     }
-  | { kind: "abilities"; card: CardView; cast?: boolean }
-  | { kind: "modes"; card: CardView; first?: Target };
+  | { kind: "abilities"; card: CardView; ways: CastOptions[]; land: boolean; faceUp: boolean }
+  | { kind: "modes"; card: CardView; first?: Target; opts?: CastOptions };
 
 const SunIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
@@ -79,6 +79,12 @@ function Medallion({ seat, targetable, onClick, position }: { seat: SeatView; ta
     <div className={`medallion medallion-${position} ${targetable ? "glow-target clickable" : ""} ${seat.has_priority ? "has-priority" : ""}`} onClick={onClick} data-player={seat.id}>
       <Sigil seat={seat} size={64} />
       <div className="life">{seat.life}</div>
+      {(seat.monarch || seat.poison > 0) && (
+        <div className="seat-status">
+          {seat.monarch && <span className="status-chip monarch" title="The monarch draws a card at the beginning of their end step">♛ Monarch</span>}
+          {seat.poison > 0 && <span className="status-chip poison" title="Poison counters: ten or more and the player loses">☠ {seat.poison}</span>}
+        </div>
+      )}
       {Object.keys(seat.mana_pool).length > 0 && (
         <div className="pool">
           {Object.entries(seat.mana_pool).map(([k, v]) => (
@@ -460,10 +466,16 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     else setMode({ ...mode, chosen: [] });
   };
 
-  const beginCast = (c: CardView, first?: Target, spellMode?: number) => {
+  const beginCast = (c: CardView, first?: Target, spellMode?: number, opts: CastOptions = {}) => {
+    // A face-down spell has no targets, modes or X (CR 708.4).
+    if (opts.face_down) {
+      setMode({ kind: "idle" });
+      act({ Cast: { card: c.id, targets: [], x: 0, mode: null, opts } });
+      return;
+    }
     // Modal spells pick a mode first (CR 700.2); only modes with legal targets are offered.
     if (c.spell_modes?.length && spellMode === undefined) {
-      setMode({ kind: "modes", card: c, first });
+      setMode({ kind: "modes", card: c, first, opts });
       return;
     }
     const m = spellMode ?? null;
@@ -478,10 +490,10 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     }
     if (slots.length === 0) {
       setMode({ kind: "idle" });
-      act({ Cast: { card: c.id, targets: [], x, mode: m } });
+      act({ Cast: { card: c.id, targets: [], x, mode: m, opts } });
     } else {
       const chosen = first && slots[0]?.some((o) => sameTarget(o, first)) ? [first] : [];
-      setMode({ kind: "target", title: `${c.name}: choose ${labels[0] ?? "a target"}`, slots, chosen, source: c.id, cancellable: true, build: (t) => ({ Cast: { card: c.id, targets: t, x, mode: m } }) });
+      setMode({ kind: "target", title: `${c.name}: choose ${labels[0] ?? "a target"}`, slots, chosen, source: c.id, cancellable: true, build: (t) => ({ Cast: { card: c.id, targets: t, x, mode: m, opts } }) });
     }
   };
 
@@ -553,18 +565,29 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
   }, [trigs, mode.kind, startTriggers, triggerKey]);
 
   // ---------------------------------------------------------------- clicks
+  // Every way a card can be cast right now: normal, kicked, with buyback, face down.
+  const waysFor = (c: CardView): CastOptions[] => (view.hints.cast_ways ?? []).filter(([id]) => id === c.id).map(([, o]) => o);
+  const wayLabel = (c: CardView, o: CastOptions) =>
+    o.face_down ? "Cast face down (a 2/2 for {3})" : o.evoke ? "Cast for its evoke cost (sacrificed as it enters)" : o.kicked ? "Cast with kicker" : o.buyback ? "Cast with buyback" : c.zone === "Graveyard" ? "Cast with flashback" : "Cast this spell";
+  // Click on a card you could use: play it, cast it one of its ways, use one of its abilities
+  // (cycling, unearth...) or turn it face up. One choice happens at once; several open a menu.
+  const playCard = (c: CardView) => {
+    const land = view.hints.playable_lands.includes(c.id);
+    const ways = waysFor(c);
+    const faceUp = (view.hints.face_up ?? []).includes(c.id);
+    const usable = c.abilities.filter((a) => a.activatable);
+    const total = (land ? 1 : 0) + ways.length + (faceUp ? 1 : 0) + usable.length;
+    if (total === 0) return false;
+    if (total > 1) setMode({ kind: "abilities", card: c, ways, land, faceUp });
+    else if (land) act({ PlayLand: c.id });
+    else if (ways.length === 1) beginCast(c, undefined, undefined, ways[0]);
+    else if (faceUp) act({ TurnFaceUp: c.id });
+    else activate(c, usable[0].index);
+    return true;
+  };
   const clickHand = (c: CardView) => {
     if (mode.kind === "target") return;
-    // Cycling and other abilities that work from your hand.
-    const fromHand = c.abilities.some((a) => a.activatable);
-    const playable = view.hints.playable_lands.includes(c.id) || view.hints.castable.includes(c.id);
-    if (fromHand && playable) setMode({ kind: "abilities", card: c, cast: true });
-    else if (fromHand) {
-      const usable = c.abilities.filter((a) => a.activatable);
-      if (usable.length === 1) activate(c, usable[0].index);
-      else setMode({ kind: "abilities", card: c });
-    } else if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
-    else if (view.hints.castable.includes(c.id)) beginCast(c);
+    playCard(c);
   };
 
   // Which attackers a blocker may block (a creature without flying or reach can't block a flyer).
@@ -614,9 +637,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
       }
       return;
     }
-    const usable = c.abilities.filter((a) => a.activatable);
-    if (usable.length === 1) activate(c, usable[0].index);
-    else if (usable.length > 1) setMode({ kind: "abilities", card: c });
+    playCard(c);
   };
 
   const glowFor = (c: CardView): "play" | "target" | "attack" | "block" | "selected" | null => {
@@ -628,6 +649,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
     if (view.your_decision && kind === "DeclareBlockers" && view.hints.blockers.includes(c.id)) return "play";
     if (view.your_decision && kind === "DeclareBlockers" && pickedBlocker !== null && c.attacking === view.you) return canBlock(pickedBlocker, c.id) ? "target" : null;
     if (c.abilities.some((a) => a.activatable && !a.is_mana)) return "play";
+    if ((view.hints.face_up ?? []).includes(c.id)) return "play";
     return null;
   };
 
@@ -938,6 +960,8 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
             <Sigil seat={p} size={28} />
             <span className="seat-name">{p.name}</span>
             <LifePill life={p.life} />
+            {p.monarch && <span className="status-chip monarch" title="The monarch">♛</span>}
+            {p.poison > 0 && <span className="status-chip poison" title="Poison counters">☠ {p.poison}</span>}
             <span className="seat-meta">{thinking === p.id ? <span className="thinking-dots">thinking</span> : <><HandPill count={p.hand_count} /> · {p.library_count} in library</>}</span>
             {me.commander_damage[p.command[0]?.name ?? ""] !== undefined && (
               <span className="seat-cmd" title="Commander damage you've taken from them">⚔ {me.commander_damage[p.command[0]?.name ?? ""]}</span>
@@ -1194,9 +1218,9 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
               {cards.length === 0 && <span className="muted small">Empty.</span>}
               {cards.map((c) => (
                 <Card key={c.id} card={c} size="field"
-                  glow={isChosen({ Object: c.id }) ? "selected" : isTargetable({ Object: c.id }) ? "target" : null}
+                  glow={isChosen({ Object: c.id }) ? "selected" : isTargetable({ Object: c.id }) ? "target" : owner.is_you && mode.kind === "idle" && (waysFor(c).length > 0 || c.abilities.some((a) => a.activatable)) ? "play" : null}
                   dim={mode.kind === "target" && !pickable({ Object: c.id })}
-                  onClick={pickable({ Object: c.id }) ? () => chooseTarget({ Object: c.id }) : undefined}
+                  onClick={pickable({ Object: c.id }) ? () => chooseTarget({ Object: c.id }) : owner.is_you && mode.kind === "idle" ? () => playCard(c) : undefined}
                   onHover={setHover} onInspect={setInspect} />
               ))}
             </div>
@@ -1222,14 +1246,19 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
         <div className="scrim" onClick={() => setMode({ kind: "idle" })}>
           <div className="menu" onClick={(e) => e.stopPropagation()}>
             <div className="menu-title">{mode.card.name}</div>
-            {mode.cast && (
-              <button className="menu-item" onClick={() => {
-                const c = mode.card;
-                setMode({ kind: "idle" });
-                if (view.hints.playable_lands.includes(c.id)) act({ PlayLand: c.id });
-                else beginCast(c);
-              }}>
-                <span>{view.hints.playable_lands.includes(mode.card.id) ? "Play this land" : "Cast this spell"}</span>
+            {mode.land && (
+              <button className="menu-item" onClick={() => { setMode({ kind: "idle" }); act({ PlayLand: mode.card.id }); }}>
+                <span>Play this land</span>
+              </button>
+            )}
+            {mode.ways.map((o, i) => (
+              <button key={`way${i}`} className="menu-item" onClick={() => { const c = mode.card; setMode({ kind: "idle" }); beginCast(c, undefined, undefined, o); }}>
+                <span>{wayLabel(mode.card, o)}</span>
+              </button>
+            ))}
+            {mode.faceUp && (
+              <button className="menu-item" onClick={() => { setMode({ kind: "idle" }); act({ TurnFaceUp: mode.card.id }); }}>
+                <span>Turn face up</span>
               </button>
             )}
             {mode.card.abilities.filter((a) => a.activatable).map((a) => (
@@ -1249,7 +1278,7 @@ export function Table({ session, onExit: exitTable }: { session: GameSession; on
             {(mode.card.spell_modes ?? []).map(([text], i) => {
               const ok = view.hints.mode_targets?.[`${mode.card.id}:${i}`] !== undefined;
               return (
-                <button key={i} className="menu-item" disabled={!ok} onClick={() => beginCast(mode.card, mode.first, i)}>
+                <button key={i} className="menu-item" disabled={!ok} onClick={() => beginCast(mode.card, mode.first, i, mode.opts)}>
                   <span>{text}</span>
                 </button>
               );

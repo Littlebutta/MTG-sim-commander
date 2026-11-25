@@ -51,6 +51,7 @@ fn commander_tax_increases_each_cast_from_command_zone() {
             targets: vec![],
             x: 0,
             mode: None,
+            opts: Default::default(),
         },
     );
     assert!(matches!(r, Err(RulesError::Illegal(_))), "needs {{2}} more");
